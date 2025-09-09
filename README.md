@@ -1,2 +1,2 @@
-# Etsy
-Website for Etsy Scents
+# Esty
+Website for Esty Scents
