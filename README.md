@@ -1,2 +1,4 @@
 # Esty
 Website for Esty Scents
+
+WELCOME SA WEBSITE NAMIN NA WALANG KWINTA
