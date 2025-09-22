@@ -27,8 +27,47 @@ if (isset($_GET['clear'])) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Your Cart</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-3 px-4 fixed-top">
+  <div class="container-fluid d-flex justify-content-between align-items-center">
+
+    <!-- Left: Logo -->
+    <a class="navbar-brand d-flex align-items-center" href="index.php">
+      <img src="images/logo-placeholder.png" alt="Esty Scents Logo" class="logo me-2">
+      <span class="fw-bold">Esty Scents</span>
+    </a>
+
+    <!-- Right: Search + Icons -->
+    <div class="d-flex align-items-center gap-3">
+
+      <!-- Search Bar -->
+      <form class="d-flex" role="search">
+        <input class="form-control search-bar me-2" type="search" placeholder="Search scents..." aria-label="Search">
+        <button class="btn btn" type="submit">Search</button>
+      </form>
+
+      <!-- User Account -->
+      <a href="#" class="text-dark fs-5">
+        <i class="bi bi-person"></i>
+      </a>
+
+      <!-- Cart -->
+      <a href="cart.php" class="text-dark fs-5 position-relative">
+        <i class="bi bi-cart"></i>
+        <?php if (!empty($_SESSION['cart'])): ?>
+          <span class="badge bg-danger position-absolute top-0 start-100 translate-middle">
+            <?= array_sum(array_column($_SESSION['cart'], 'quantity')); ?>
+          </span>
+        <?php endif; ?>
+      </a>
+    </div>
+  </div>
+</nav>
+
 <div class="container my-5">
   <h1 class="mb-4">Shopping Cart</h1>
   <?php if (!empty($_SESSION['cart'])): ?>
