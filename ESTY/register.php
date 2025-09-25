@@ -29,10 +29,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $stmt = $conn->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
             $stmt->bind_param("sss", $username, $email, $hashed_password);
             if ($stmt->execute()) {
-                $message = "Registration successful! You can now <a href='login.php'>login</a>.";
-            } else {
-                $message = "Error: Could not register user.";
-            }
+    // Get inserted user id
+    $new_user_id = $stmt->insert_id;
+
+    // Auto login
+    $_SESSION['user_id'] = $new_user_id;
+    $_SESSION['username'] = $username;
+
+    // Redirect to homepage as logged in
+    header("Location: index.php");
+    exit;
+} else {
+    $message = "Error: Could not register user.";
+}
+
         }
         $stmt->close();
     }

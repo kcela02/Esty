@@ -1,6 +1,5 @@
 <?php
 session_start();
-
 // If cart is empty, redirect back
 if (empty($_SESSION['cart'])) {
     header("Location: cart.php");

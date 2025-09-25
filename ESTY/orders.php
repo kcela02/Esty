@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once "../db.php"; // your DB connection
-
+include 'navbar.php';
 // Fetch all orders
 $sql = "SELECT * FROM orders ORDER BY created_at DESC";
 $result = $conn->query($sql);
