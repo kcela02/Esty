@@ -1,23 +1,9 @@
 <?php
 session_start();
 require 'db.php';
+include 'navbar.php';
 
-$message = "";
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['subscribe'])) {
-    $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
-    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $stmt = $conn->prepare("INSERT INTO subscribers (email) VALUES (?)");
-        $stmt->bind_param("s", $email);
-        if ($stmt->execute()) {
-            $message = "Thank you for subscribing, " . htmlspecialchars($email) . "!";
-        } else {
-            $message = "You are already subscribed!";
-        }
-        $stmt->close();
-    } else {
-        $message = "Please enter a valid email address.";
-    }
-}
+
 // Fetch All Products
 $products = [];
 $result = $conn->query("SELECT * FROM products ORDER BY id ASC");
@@ -38,42 +24,6 @@ if ($result && $result->num_rows > 0) {
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-3 px-4 fixed-top">
-    <div class="container-fluid d-flex justify-content-between align-items-center">
-
-      <!-- Left: Logo -->
-      <a class="navbar-brand d-flex align-items-center" href="index.php">
-        <img src="images/logo.jpg" alt="Esty Scents Logo" class="logo me-2">
-        <span class="fw-bold">Esty Scents</span>
-      </a>
-
-      <!-- Right: Search + Icons -->
-      <div class="d-flex align-items-center gap-3">
-
-        <!-- Search Bar -->
-        <form class="d-flex" role="search">
-          <input class="form-control search-bar me-2" type="search" placeholder="Search scents..." aria-label="Search">
-          <button class="btn btn" type="submit">Search</button>
-        </form>
-
-        <!-- User Account -->
-        <a href="login.php" class="text-dark fs-5">
-          <i class="bi bi-person"></i>
-        </a>
-
-        <!-- Cart -->
-        <a href="cart.php" class="text-dark fs-5 position-relative">
-          <i class="bi bi-cart"></i>
-          <?php if (!empty($_SESSION['cart'])): ?>
-            <span class="badge bg-danger position-absolute top-0 start-100 translate-middle">
-              <?= array_sum(array_column($_SESSION['cart'], 'quantity')); ?>
-            </span>
-          <?php endif; ?>
-        </a>
-      </div>
-    </div>
-  </nav>
 
 
   <!-- Product List -->
@@ -107,18 +57,44 @@ if ($result && $result->num_rows > 0) {
   <section class="bg-dark text-white text-center p-5">
     <h2>Stay Updated</h2>
     <p>Subscribe for the latest promos and offers!</p>
-    <form method="POST" class="d-flex justify-content-center">
+    <form id="newsletterForm" class="d-flex justify-content-center">
       <input type="email" name="email" placeholder="Enter your email" class="form-control w-25 me-2" required>
-      <button type="submit" name="subscribe" class="btn btn-warning">Subscribe</button>
+      <button type="submit" class="btn btn-warning">Subscribe</button>
     </form>
-    <?php if ($message): ?>
-      <p class="mt-3"><?= $message; ?></p>
-    <?php endif; ?>
+    <p id="newsletterMessage" class="mt-3"></p>
+</section>
+
+<script>
+document.getElementById('newsletterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const email = this.email.value;
+    const messageEl = document.getElementById('newsletterMessage');
+
+    fetch('subscribe.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'email=' + encodeURIComponent(email)
+    })
+    .then(response => response.json())
+    .then(data => {
+        messageEl.textContent = data.message;
+        messageEl.className = data.status === 'success' ? 'text-success mt-3' : 'text-danger mt-3';
+        if (data.status === 'success') this.reset();
+    })
+    .catch(err => {
+        messageEl.textContent = 'Something went wrong. Please try again.';
+        messageEl.className = 'text-danger mt-3';
+    });
+});
+</script>
+
+
   </section>
 
   <!-- Footer -->
   <footer class="bg-light text-center py-3">
     <p>&copy; <?= date("Y"); ?> Esty Scents. All Rights Reserved.</p>
   </footer>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

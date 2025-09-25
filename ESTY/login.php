@@ -1,7 +1,6 @@
 <?php
 session_start();
 require 'db.php';
-
 $message = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -19,6 +18,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Successful login
             $_SESSION['user_id'] = $id;
             $_SESSION['username'] = $username;
+
+            // Load cart from DB into session
+            $_SESSION['cart'] = [];
+
+            $stmt = $conn->prepare("
+                SELECT c.product_id, c.quantity, p.name, p.price
+                FROM carts c
+                JOIN products p ON c.product_id = p.id
+                WHERE c.user_id = ?
+            ");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+
+            while ($row = $result->fetch_assoc()) {
+                $_SESSION['cart'][] = [
+                    'id' => $row['product_id'],
+                    'name' => $row['name'],
+                    'price' => $row['price'],
+                    'quantity' => $row['quantity']
+                ];
+            }
+
             header("Location: index.php");
             exit;
         } else {

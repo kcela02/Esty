@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once "db.php"; // database connection file
-
+include 'navbar.php';
 // Redirect if cart is empty
 if (!isset($_SESSION['cart']) || count($_SESSION['cart']) == 0) {
     header("Location: cart.php");

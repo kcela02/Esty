@@ -1,5 +1,6 @@
 <?php
 session_start();
+include 'navbar.php';
 
 // Remove item
 if (isset($_GET['remove'])) {
@@ -19,6 +20,25 @@ if (isset($_GET['clear'])) {
     header("Location: cart.php");
     exit;
 }
+
+// Update quantity
+if (isset($_GET['update']) && isset($_GET['id'])) {
+    foreach ($_SESSION['cart'] as $key => $item) {
+        if ($item['id'] == $_GET['id']) {
+            if ($_GET['update'] === 'increase') {
+                $_SESSION['cart'][$key]['quantity']++;
+            } elseif ($_GET['update'] === 'decrease') {
+                $_SESSION['cart'][$key]['quantity']--;
+                if ($_SESSION['cart'][$key]['quantity'] <= 0) {
+                    unset($_SESSION['cart'][$key]);
+                }
+            }
+        }
+    }
+    $_SESSION['cart'] = array_values($_SESSION['cart']); // reindex
+    header("Location: cart.php");
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -31,46 +51,10 @@ if (isset($_GET['clear'])) {
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm py-3 px-4 fixed-top">
-  <div class="container-fluid d-flex justify-content-between align-items-center">
-
-    <!-- Left: Logo -->
-    <a class="navbar-brand d-flex align-items-center" href="index.php">
-      <img src="images/logo.jpg" alt="Esty Scents Logo" class="logo me-2">
-      <span class="fw-bold">Esty Scents</span>
-    </a>
-
-    <!-- Right: Search + Icons -->
-    <div class="d-flex align-items-center gap-3">
-
-      <!-- Search Bar -->
-      <form class="d-flex" role="search">
-        <input class="form-control search-bar me-2" type="search" placeholder="Search scents..." aria-label="Search">
-        <button class="btn btn" type="submit">Search</button>
-      </form>
-
-      <!-- User Account -->
-      <a href="#" class="text-dark fs-5">
-        <i class="bi bi-person"></i>
-      </a>
-
-      <!-- Cart -->
-      <a href="cart.php" class="text-dark fs-5 position-relative">
-        <i class="bi bi-cart"></i>
-        <?php if (!empty($_SESSION['cart'])): ?>
-          <span class="badge bg-danger position-absolute top-0 start-100 translate-middle">
-            <?= array_sum(array_column($_SESSION['cart'], 'quantity')); ?>
-          </span>
-        <?php endif; ?>
-      </a>
-    </div>
-  </div>
-</nav>
 
 <div class="container my-5">
   <?php if (!empty($_SESSION['cart'])): ?>
-    <table class="table table-bordered text-center">
+    <table class="table table-bordered text-center align-middle">
       <thead class="table-dark">
         <tr>
           <th>Product</th>
@@ -87,22 +71,45 @@ if (isset($_GET['clear'])) {
           <?php $grandTotal += $total; ?>
           <tr>
             <td><?= htmlspecialchars($item['name']); ?></td>
-            <td>₱<?= $item['price']; ?></td>
-            <td><?= $item['quantity']; ?></td>
-            <td>₱<?= $total; ?></td>
-            <td><a href="cart.php?remove=<?= $item['id']; ?>" class="btn remove-btn">Remove</a></td>
-          </tr>
+            <td>₱<?= number_format($item['price'], 2); ?></td>
 
+            <!-- Quantity with + / - icon buttons -->
+            <td>
+              <div class="d-flex justify-content-center align-items-center gap-1">
+                <!-- Decrease Button -->
+                <a href="cart.php?update=decrease&id=<?= $item['id']; ?>"
+                   class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center p-1"
+                   style="width:28px; height:28px;">
+                  <i class="bi bi-dash"></i>
+                </a>
+
+                <!-- Quantity Number -->
+                <span class="mx-2"><?= $item['quantity']; ?></span>
+
+                <!-- Increase Button -->
+                <a href="cart.php?update=increase&id=<?= $item['id']; ?>"
+                   class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center p-1"
+                   style="width:28px; height:28px;">
+                  <i class="bi bi-plus"></i>
+                </a>
+              </div>
+            </td>
+
+            <td>₱<?= number_format($total, 2); ?></td>
+            <td><a href="cart.php?remove=<?= $item['id']; ?>" class="btn btn-danger btn-sm">Remove</a></td>
+          </tr>
         <?php endforeach; ?>
       </tbody>
     </table>
+
     <div class="text-end mb-3">
-      <h4>Grand Total: ₱<?= $grandTotal; ?></h4>
+      <h4>Grand Total: ₱<?= number_format($grandTotal, 2); ?></h4>
     </div>
     <div class="d-flex justify-content-between align-items-center mt-4">
-    <a href="index.php" class="btn btn-primary">Continue Shopping</a>
-    <a href="checkout.php" class="btn btn-success checkout-btn">Proceed to Checkout</a>
-  </div>
+      <a href="index.php" class="btn btn-primary">Continue Shopping</a>
+      <a href="checkout.php" class="btn btn-success checkout-btn">Proceed to Checkout</a>
+    </div>
+
   <?php else: ?>
     <div class="empty-cart text-center my-5 p-5">
       <i class="bi bi-cart-x display-1 text-muted"></i>
@@ -111,7 +118,8 @@ if (isset($_GET['clear'])) {
       <a href="index.php" class="btn btn-pastel mt-3">Go Back to Shop</a>
     </div>
   <?php endif; ?>
-
 </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
