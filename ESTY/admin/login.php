@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = trim($_POST['password']);
 
-    // Check user
+    // Check admin credentials
     $stmt = $conn->prepare("SELECT * FROM admin_users WHERE username = ? AND password = MD5(?)");
     $stmt->bind_param("ss", $username, $password);
     $stmt->execute();
@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($result->num_rows === 1) {
         $_SESSION['admin'] = $username;
-        header("Location: orders.php");
+        header("Location: dashboard.php"); // ✅ redirect to dashboard instead of orders
         exit;
     } else {
         $error = "Invalid username or password!";
@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <div class="card p-4 shadow" style="width: 350px;">
     <h3 class="text-center mb-3">🔑 Admin Login</h3>
     <?php if ($error): ?>
-      <div class="alert alert-danger"><?= $error; ?></div>
+      <div class="alert alert-danger"><?= htmlspecialchars($error); ?></div>
     <?php endif; ?>
     <form method="post">
       <div class="mb-3">

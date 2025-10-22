@@ -2,7 +2,8 @@
 session_start();
 require 'db.php';
 include 'navbar.php';
-//add to cart
+
+// Add to cart
 if (isset($_POST['add_to_cart'])) {
     $product_id = $_POST['id'];
     $product_name = $_POST['name'];
@@ -31,11 +32,9 @@ if (isset($_POST['add_to_cart'])) {
             $insert->execute();
         }
 
-        // ✅ Update session cart immediately
+        // Update session cart immediately
         $found = false;
-        if (!isset($_SESSION['cart'])) {
-            $_SESSION['cart'] = [];
-        }
+        if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
         foreach ($_SESSION['cart'] as &$item) {
             if ($item['id'] == $product_id) {
                 $item['quantity']++;
@@ -53,18 +52,9 @@ if (isset($_POST['add_to_cart'])) {
         }
 
     } else {
-        // Guest cart (same as before)
-        $product = [
-            'id' => $product_id,
-            'name' => $product_name,
-            'price' => $price,
-            'quantity' => 1
-        ];
-
-        if (!isset($_SESSION['cart'])) {
-            $_SESSION['cart'] = [];
-        }
-
+        // Guest cart
+        $product = ['id'=>$product_id,'name'=>$product_name,'price'=>$price,'quantity'=>1];
+        if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
         $found = false;
         foreach ($_SESSION['cart'] as &$item) {
             if ($item['id'] == $product_id) {
@@ -73,42 +63,62 @@ if (isset($_POST['add_to_cart'])) {
                 break;
             }
         }
-        if (!$found) {
-            $_SESSION['cart'][] = $product;
-        }
+        if (!$found) $_SESSION['cart'][] = $product;
     }
 
     header("Location: " . $_SERVER['HTTP_REFERER']);
     exit;
-
 }
-  
 
-// =============================
-// Fetch Products from Database
-// =============================
+// Fetch featured products (index)
 $products = [];
-$result = $conn->query("SELECT * FROM products WHERE featured = 1 ORDER BY id ASC LIMIT 3");
+$result = $conn->query("SELECT * FROM products WHERE featured = 1 ORDER BY id ASC LIMIT 4");
 if ($result && $result->num_rows > 0) {
-    while ($row = $result->fetch_assoc()) {
-        $products[] = $row;
-    }
+    while ($row = $result->fetch_assoc()) $products[] = $row;
+}
+
+// Fetch all products
+$all_products = [];
+$result_all = $conn->query("SELECT * FROM products ORDER BY id ASC");
+if ($result_all && $result_all->num_rows > 0) {
+    while ($row = $result_all->fetch_assoc()) $all_products[] = $row;
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Esty Scents | Fragrance Shop</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Esty Scents | Fragrance Shop</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="style.css">
+<style>
+/* Admin card style for public products */
+.card.card-interactive {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card.card-interactive:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+}
+
+.card.card-interactive img {
+    height: 250px;
+    object-fit: cover;
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+}
+</style>
 </head>
 <body>
 
-
-  <!-- Highlighted Product -->
+<!-- Highlighted Product Banner -->
 <section class="new-product-banner d-flex align-items-center justify-content-center text-center text-white">
   <div class="overlay"></div>
   <div class="content">
@@ -117,15 +127,15 @@ if ($result && $result->num_rows > 0) {
     <a href="products.php" class="btn btn-lg btn-light">Shop Now</a>
   </div>
 </section>
-  <!-- Product Showcase -->
-  <!-- Product Showcase -->
+
+<!-- Featured Products -->
 <section id="products" class="container my-5">
   <h2 class="text-center mb-4">Featured Products</h2>
   <div class="row g-4 align-items-stretch">
     <?php if (!empty($products)): ?>
       <?php foreach ($products as $p): ?>
-        <div class="col-md-4 d-flex">
-          <div class="card shadow h-100">
+        <div class="col-md-3 d-flex">
+          <div class="card card-interactive shadow h-100">
             <img src="<?= htmlspecialchars($p['image']); ?>" class="card-img-top" alt="<?= htmlspecialchars($p['name']); ?>">
             <div class="card-body text-center d-flex flex-column justify-content-between">
               <div>
@@ -143,28 +153,23 @@ if ($result && $result->num_rows > 0) {
         </div>
       <?php endforeach; ?>
     <?php else: ?>
-      <p class="text-center">No products available right now.</p>
+      <p class="text-center">No featured products available.</p>
     <?php endif; ?>
   </div>
-
-  <!-- See All Products Button -->
   <div class="text-center mt-4">
-    <a href="products.php" class="btn btn-outline-primary btn-lg">
-      See All Products
-    </a>
+    <a href="products.php" class="btn btn-outline-primary btn-lg">See All Products</a>
   </div>
 </section>
 
-
-  <!-- Newsletter -->
-  <section class="bg-dark text-white text-center p-5">
-    <h2>Stay Updated</h2>
-    <p>Subscribe for the latest promos and offers!</p>
-    <form id="newsletterForm" class="d-flex justify-content-center">
-      <input type="email" name="email" placeholder="Enter your email" class="form-control w-25 me-2" required>
-      <button type="submit" class="btn btn-warning">Subscribe</button>
-    </form>
-    <p id="newsletterMessage" class="mt-3"></p>
+<!-- Newsletter -->
+<section class="bg-dark text-white text-center p-5">
+  <h2>Stay Updated</h2>
+  <p>Subscribe for the latest promos and offers!</p>
+  <form id="newsletterForm" class="d-flex justify-content-center">
+    <input type="email" name="email" placeholder="Enter your email" class="form-control w-25 me-2" required>
+    <button type="submit" class="btn btn-warning">Subscribe</button>
+  </form>
+  <p id="newsletterMessage" class="mt-3"></p>
 </section>
 
 <script>
@@ -191,13 +196,11 @@ document.getElementById('newsletterForm').addEventListener('submit', function(e)
 });
 </script>
 
+<!-- Footer -->
+<footer class="bg-light text-center py-3">
+  <p>&copy; <?= date("Y"); ?> Esty Scents. All Rights Reserved.</p>
+</footer>
 
-
-  <!-- Footer -->
-  <footer class="bg-light text-center py-3">
-    <p>&copy; <?= date("Y"); ?> Esty Scents. All Rights Reserved.</p>
-  </footer>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -33,7 +33,7 @@ if ($result && $result->num_rows > 0) {
       <?php if (!empty($products)): ?>
         <?php foreach ($products as $p): ?>
           <div class="col-md-3">
-            <div class="card shadow h-100">
+            <div class="card card-interactive shadow h-100">
               <img src="<?= htmlspecialchars($p['image']); ?>" class="card-img-top" alt="<?= htmlspecialchars($p['name']); ?>">
               <div class="card-body text-center">
                 <h5 class="card-title"><?= htmlspecialchars($p['name']); ?></h5>
