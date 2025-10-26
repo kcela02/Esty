@@ -71,7 +71,7 @@ $stmt->close();
     <h2 class="mb-4">My Account</h2>
 
     <!-- Account Details -->
-    <div class="card mb-4">
+    <div class="card">
         <div class="card-header">Account Details</div>
         <div class="card-body">
             <p><strong>Username:</strong> <?= htmlspecialchars($account_user['username']); ?></p>

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 26, 2025 at 12:38 PM
+-- Generation Time: Oct 26, 2025 at 02:37 PM
 -- Server version: 10.4.27-MariaDB
 -- PHP Version: 8.1.12
 
@@ -56,7 +56,8 @@ CREATE TABLE `admin_activity_logs` (
 INSERT INTO `admin_activity_logs` (`id`, `admin_username`, `action`, `details`, `ip_address`, `created_at`) VALUES
 (1, 'admin', 'Logout', NULL, '::1', '2025-10-26 10:31:59'),
 (2, 'admin', 'Login', NULL, '::1', '2025-10-26 10:32:06'),
-(3, 'admin', 'Login', NULL, '::1', '2025-10-26 10:37:48');
+(3, 'admin', 'Login', NULL, '::1', '2025-10-26 10:37:48'),
+(4, 'admin', 'Login', NULL, '::1', '2025-10-26 13:35:51');
 
 -- --------------------------------------------------------
 
@@ -382,7 +383,7 @@ ALTER TABLE `activity_logs`
 -- AUTO_INCREMENT for table `admin_activity_logs`
 --
 ALTER TABLE `admin_activity_logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `admin_logs`

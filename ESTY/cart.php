@@ -1,6 +1,21 @@
 <?php
 session_start();
+require 'db.php';
 include 'navbar.php';
+
+// Ensure products table has `stock` column for cart enforcement
+if (!function_exists('ensureProductStockColumn')) {
+  function ensureProductStockColumn(mysqli $conn): void {
+    $sql = "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'stock'";
+    if ($res = $conn->query($sql)) {
+      if ($res->num_rows === 0) {
+        @$conn->query("ALTER TABLE products ADD COLUMN stock INT NOT NULL DEFAULT 0 AFTER featured");
+      }
+      $res->close();
+    }
+  }
+}
+ensureProductStockColumn($conn);
 
 // Remove item
 if (isset($_GET['remove'])) {
@@ -26,7 +41,21 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
     foreach ($_SESSION['cart'] as $key => $item) {
         if ($item['id'] == $_GET['id']) {
             if ($_GET['update'] === 'increase') {
-                $_SESSION['cart'][$key]['quantity']++;
+        // Check stock before increasing
+        $pid = intval($_GET['id']);
+        $stock = null;
+        $pstmt = $conn->prepare("SELECT COALESCE(stock,0) FROM products WHERE id=?");
+        $pstmt->bind_param("i", $pid);
+        $pstmt->execute();
+        $pstmt->bind_result($stock);
+        $pstmt->fetch();
+        $pstmt->close();
+        $current = (int)$_SESSION['cart'][$key]['quantity'];
+        if ($stock === null || $current >= (int)$stock) {
+          $_SESSION['flash'] = 'Reached available stock for ' . htmlspecialchars($item['name']);
+        } else {
+          $_SESSION['cart'][$key]['quantity'] = $current + 1;
+        }
             } elseif ($_GET['update'] === 'decrease') {
                 $_SESSION['cart'][$key]['quantity']--;
                 if ($_SESSION['cart'][$key]['quantity'] <= 0) {
@@ -53,6 +82,9 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
 <body>
 
 <div class="container my-5">
+  <?php if (!empty($_SESSION['flash'])): ?>
+    <div class="alert alert-warning"><?= htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></div>
+  <?php endif; ?>
   <?php if (!empty($_SESSION['cart'])): ?>
     <table class="table table-bordered text-center align-middle">
       <thead class="table-dark">

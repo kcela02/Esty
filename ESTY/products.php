@@ -3,6 +3,20 @@ session_start();
 require 'db.php';
 include 'navbar.php';
 
+// Ensure products table has a `stock` column for showing stock badges
+if (!function_exists('ensureProductStockColumn')) {
+  function ensureProductStockColumn(mysqli $conn): void {
+    $sql = "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products' AND COLUMN_NAME = 'stock'";
+    if ($res = $conn->query($sql)) {
+      if ($res->num_rows === 0) {
+        @$conn->query("ALTER TABLE products ADD COLUMN stock INT NOT NULL DEFAULT 0 AFTER featured");
+      }
+      $res->close();
+    }
+  }
+}
+ensureProductStockColumn($conn);
+
 
 // Fetch All Products
 $products = [];
@@ -33,16 +47,23 @@ if ($result && $result->num_rows > 0) {
       <?php if (!empty($products)): ?>
         <?php foreach ($products as $p): ?>
           <div class="col-md-3">
-            <div class="card shadow h-100">
-              <img src="<?= htmlspecialchars($p['image']); ?>" class="card-img-top" alt="<?= htmlspecialchars($p['name']); ?>">
+            <div class="card card-interactive shadow h-100">
+              <img src="<?= htmlspecialchars($p['image']); ?>" class="card-img-top" alt="<?= htmlspecialchars($p['name']); ?>" style="height: 250px; object-fit: cover;">
               <div class="card-body text-center">
                 <h5 class="card-title"><?= htmlspecialchars($p['name']); ?></h5>
+                <p class="card-text small mb-1 text-muted"><?= htmlspecialchars($p['description']); ?></p>
                 <p class="card-text">₱<?= number_format($p['price'], 2); ?></p>
+                <?php $stock = isset($p['stock']) ? (int)$p['stock'] : null; ?>
+                <p class="mb-2">
+                  <?php if ($stock !== null): ?>
+                    <span class="badge <?= $stock > 0 ? 'bg-success' : 'bg-secondary'; ?>"><?= $stock > 0 ? ('In stock: ' . $stock) : 'Out of stock'; ?></span>
+                  <?php endif; ?>
+                </p>
                 <form method="POST" action="index.php">
                   <input type="hidden" name="id" value="<?= $p['id']; ?>">
                   <input type="hidden" name="name" value="<?= htmlspecialchars($p['name']); ?>">
                   <input type="hidden" name="price" value="<?= $p['price']; ?>">
-                  <button type="submit" name="add_to_cart" class="btn btn-primary">Add to Cart</button>
+                  <button type="submit" name="add_to_cart" class="btn btn-primary" <?= ($stock !== null && $stock <= 0) ? 'disabled' : '' ?>>Add to Cart</button>
                 </form>
               </div>
             </div>
@@ -63,6 +84,12 @@ if ($result && $result->num_rows > 0) {
     </form>
     <p id="newsletterMessage" class="mt-3"></p>
 </section>
+
+<?php if (!empty($_SESSION['flash'])): ?>
+  <div class="container mt-3">
+    <div class="alert alert-warning"><?= htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></div>
+  </div>
+<?php endif; ?>
 
 <script>
 document.getElementById('newsletterForm').addEventListener('submit', function(e) {
