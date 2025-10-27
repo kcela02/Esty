@@ -98,6 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_product'])) {
     $price = floatval($_POST['price']);
     $featured = isset($_POST['featured']) ? 1 : 0;
     $stock = isset($_POST['stock']) ? max(0, intval($_POST['stock'])) : 0;
+    $category_id = intval($_POST['category_id'] ?? 0);
+    $brand_id = intval($_POST['brand_id'] ?? 0);
 
     try {
         $imagePath = uploadProductImage('image');
@@ -110,8 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_product'])) {
         if ($imagePath === null) {
             $errorMessage = 'Please upload an image for the product.';
         } else {
-            $stmt = $conn->prepare("INSERT INTO products (name, description, price, image, featured, stock, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
-            $stmt->bind_param("ssdsii", $name, $description, $price, $imagePath, $featured, $stock);
+            $stmt = $conn->prepare("INSERT INTO products (name, description, price, image, featured, stock, category_id, brand_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            $stmt->bind_param("ssdsiiiii", $name, $description, $price, $imagePath, $featured, $stock, $category_id, $brand_id);
             $stmt->execute();
             $stmt->close();
 
@@ -304,6 +306,35 @@ if ($result && $result->num_rows > 0) {
             <div class="mb-3"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3" required></textarea></div>
             <div class="mb-3"><label class="form-label">Price</label><input type="number" step="0.01" name="price" class="form-control" required></div>
             <div class="mb-3"><label class="form-label">Stock</label><input type="number" min="0" name="stock" class="form-control" value="0" required></div>
+            
+            <!-- Category & Brand -->
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Category</label>
+                    <select name="category_id" class="form-select">
+                        <option value="0">Select Category</option>
+                        <?php
+                        $cat_result = $conn->query("SELECT id, name FROM categories ORDER BY name");
+                        while ($cat = $cat_result->fetch_assoc()) {
+                            echo '<option value="' . $cat['id'] . '">' . htmlspecialchars($cat['name']) . '</option>';
+                        }
+                        ?>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Brand</label>
+                    <select name="brand_id" class="form-select">
+                        <option value="0">Select Brand</option>
+                        <?php
+                        $br_result = $conn->query("SELECT id, name FROM brands ORDER BY name");
+                        while ($br = $br_result->fetch_assoc()) {
+                            echo '<option value="' . $br['id'] . '">' . htmlspecialchars($br['name']) . '</option>';
+                        }
+                        ?>
+                    </select>
+                </div>
+            </div>
+            
             <div class="mb-3"><label class="form-label">Image</label><input type="file" name="image" class="form-control" accept="image/*" required></div>
             <div class="form-check">
                 <input type="checkbox" name="featured" class="form-check-input" id="featuredCheck">

@@ -160,6 +160,14 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <i class="bi bi-box-seam"></i> <span>Products</span>
   </a>
 
+  <a href="manage_categories.php" class="<?= ($current_page == 'manage_categories.php') ? 'active' : ''; ?>">
+    <i class="bi bi-tags"></i> <span>Categories</span>
+  </a>
+
+  <a href="manage_brands.php" class="<?= ($current_page == 'manage_brands.php') ? 'active' : ''; ?>">
+    <i class="bi bi-bookmark"></i> <span>Brands</span>
+  </a>
+
   <a href="customers.php" class="<?= ($current_page == 'customers.php') ? 'active' : ''; ?>">
     <i class="bi bi-people"></i> <span>Customers</span>
   </a>

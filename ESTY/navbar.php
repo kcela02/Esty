@@ -31,16 +31,15 @@
   <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
     <?php if (isset($_SESSION['user_id'])): ?>
       <li class="dropdown-header">Hello, <?= htmlspecialchars($_SESSION['username']); ?>!</li>
-      <li><a class="dropdown-item" href="account.php">My Account</a></li>
-      <li><a class="dropdown-item" href="orders.php">My Orders</a></li>
-      <li><a class="dropdown-item" href="address.php">My Address</a></li>
+  <li><a class="dropdown-item" href="account.php">My Account</a></li>
+  <li><a class="dropdown-item" href="my_orders.php">My Orders</a></li>
       <li><a class="dropdown-item" href="track.php">Track Order</a></li>
       <li><a class="dropdown-item" href="return.php">Return Order</a></li>
       <li><hr class="dropdown-divider"></li>
       <li><a class="dropdown-item" href="logout.php">Logout</a></li>
     <?php else: ?>
-      <li><a class="dropdown-item" href="login.php">Login</a></li>
-      <li><a class="dropdown-item" href="register.php">Register</a></li>
+      <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">Login</a></li>
+      <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#registerModal">Register</a></li>
     <?php endif; ?>
   </ul>
 </div>
@@ -48,7 +47,7 @@
 
 
         <!-- Cart Icon -->
-            <a href="cart.php" class="text-dark fs-5 position-relative">
+            <a href="cart.php" class="text-dark fs-5 position-relative" title="Shopping Cart">
               <i class="bi bi-cart"></i>
               <?php if (!empty($_SESSION['cart'])): ?>
                 <span class="badge bg-danger position-absolute top-0 start-100 translate-middle"
@@ -59,7 +58,22 @@
               <?php endif; ?>
             </a>
 
+            <!-- Wishlist Icon -->
+            <?php if (isset($_SESSION['user_id'])): ?>
+              <a href="wishlist.php" class="text-dark fs-5 position-relative" title="My Wishlist">
+                <i class="bi bi-heart"></i>
+              </a>
+            <?php endif; ?>
+
+            <!-- Compare Icon -->
+            <a href="compare.php" class="text-dark fs-5 position-relative" title="Compare Products">
+              <i class="bi bi-graph-up"></i>
+            </a>
+
 
       </div>
   </div>
 </nav>
+
+<!-- Include Login/Register Modals ONLY on pages that need them (cart.php, checkout.php) -->
+<!-- DO NOT include on index.php to prevent modal from showing when adding to cart -->

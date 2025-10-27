@@ -85,6 +85,16 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
   <?php if (!empty($_SESSION['flash'])): ?>
     <div class="alert alert-warning"><?= htmlspecialchars($_SESSION['flash']); unset($_SESSION['flash']); ?></div>
   <?php endif; ?>
+  
+  <?php if (!empty($_SESSION['checkout_message'])): ?>
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+      <i class="bi bi-info-circle me-2"></i>
+      <?= htmlspecialchars($_SESSION['checkout_message']); ?>
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php unset($_SESSION['checkout_message']); ?>
+  <?php endif; ?>
+  
   <?php if (!empty($_SESSION['cart'])): ?>
     <table class="table table-bordered text-center align-middle">
       <thead class="table-dark">
@@ -139,7 +149,13 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
     </div>
     <div class="d-flex justify-content-between align-items-center mt-4">
       <a href="index.php" class="btn btn-primary">Continue Shopping</a>
-      <a href="checkout.php" class="btn btn-success checkout-btn">Proceed to Checkout</a>
+      <?php if (isset($_SESSION['user_id'])): ?>
+        <a href="checkout.php" class="btn btn-success checkout-btn">Proceed to Checkout</a>
+      <?php else: ?>
+        <button type="button" class="btn btn-success checkout-btn" data-bs-toggle="modal" data-bs-target="#loginModal">
+          <i class="bi bi-box-arrow-in-right me-2"></i> Login to Checkout
+        </button>
+      <?php endif; ?>
     </div>
 
   <?php else: ?>
@@ -151,6 +167,12 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
     </div>
   <?php endif; ?>
 </div>
+
+<!-- Include Login/Register Modals for Guests -->
+<?php if (!isset($_SESSION['user_id'])): ?>
+  <?php include 'login_register_modals.php'; ?>
+<?php endif; ?>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 </body>

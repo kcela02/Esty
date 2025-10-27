@@ -1,7 +1,15 @@
 <?php
 session_start();
+
 // If cart is empty, redirect back
 if (empty($_SESSION['cart'])) {
+    header("Location: cart.php");
+    exit;
+}
+
+// If user is not logged in, redirect to cart with message
+if (!isset($_SESSION['user_id'])) {
+    $_SESSION['checkout_message'] = "Please login or create an account to proceed with checkout.";
     header("Location: cart.php");
     exit;
 }

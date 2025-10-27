@@ -8,11 +8,23 @@
   font-family: Arial, sans-serif;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   background-color: #F5E8D0;
   color: #4B3F2F;
   line-height: 1.6;
   padding-top: 80px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+}
+
+main {
+  flex: 1;
 }
 
 /* ==========================
@@ -311,6 +323,9 @@ footer {
   color: #aaa;
   text-align: center;
   padding: 15px;
+  width: 100%;
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 /* ==========================
@@ -331,4 +346,34 @@ footer {
 @media (max-width: 480px) {
   .hero-text h1 { font-size: 1.8rem; }
   .hero-text p { font-size: 0.9rem; }
+}
+
+/* ==========================
+   Star Rating System
+========================== */
+.rating-input {
+  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.rating-input i {
+  font-size: 1.5rem;
+  color: #ccc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.rating-input i:hover {
+  color: #ffc107;
+  transform: scale(1.2);
+}
+
+.rating-input i.active {
+  color: #fbbf24;
+  font-weight: bold;
+}
+
+.rating-input i.bi-star {
+  display: inline-block;
 }
