@@ -1,7 +1,6 @@
 <?php
 session_start();
 require 'db.php';
-include 'navbar.php';
 
 // Ensure products table has `stock` column for cart enforcement
 if (!function_exists('ensureProductStockColumn')) {
@@ -17,56 +16,139 @@ if (!function_exists('ensureProductStockColumn')) {
 }
 ensureProductStockColumn($conn);
 
+// For logged-in users, synchronize cart from DB into session so cart display works consistently
+require_once __DIR__ . '/cart_helpers.php';
+if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
+  $_SESSION['cart'] = [];
+}
+if (isset($_SESSION['user_id'])) {
+  sync_session_cart_from_db($conn, $_SESSION['user_id']);
+}
+
+// Helper: sync cart from DB into session (used after DB modifications)
+// function `sync_session_cart_from_db` is defined in `cart_helpers.php` and included above.
+
 // Remove item
 if (isset($_GET['remove'])) {
+  $removeId = intval($_GET['remove']);
+  // If user is logged in, remove from DB as well
+  if (isset($_SESSION['user_id'])) {
+    $uid = $_SESSION['user_id'];
+    $dstmt = $conn->prepare("DELETE FROM carts WHERE user_id = ? AND product_id = ?");
+    $dstmt->bind_param('ii', $uid, $removeId);
+    $dstmt->execute();
+    $dstmt->close();
+
+    // Refresh session cart from DB
+    sync_session_cart_from_db($conn, $uid);
+  } else {
     foreach ($_SESSION['cart'] as $key => $item) {
-        if ($item['id'] == $_GET['remove']) {
-            unset($_SESSION['cart'][$key]);
-        }
+      if ($item['id'] == $removeId) {
+        unset($_SESSION['cart'][$key]);
+      }
     }
     $_SESSION['cart'] = array_values($_SESSION['cart']);
-    header("Location: cart.php");
-    exit;
+  }
+  header("Location: cart.php");
+  exit;
 }
 
 // Clear cart
 if (isset($_GET['clear'])) {
+  if (isset($_SESSION['user_id'])) {
+    $uid = $_SESSION['user_id'];
+    $dstmt = $conn->prepare("DELETE FROM carts WHERE user_id = ?");
+    $dstmt->bind_param('i', $uid);
+    $dstmt->execute();
+    $dstmt->close();
+    $_SESSION['cart'] = [];
+  } else {
     unset($_SESSION['cart']);
-    header("Location: cart.php");
-    exit;
+  }
+  header("Location: cart.php");
+  exit;
 }
 
 // Update quantity
 if (isset($_GET['update']) && isset($_GET['id'])) {
-    foreach ($_SESSION['cart'] as $key => $item) {
-        if ($item['id'] == $_GET['id']) {
-            if ($_GET['update'] === 'increase') {
-        // Check stock before increasing
-        $pid = intval($_GET['id']);
-        $stock = null;
-        $pstmt = $conn->prepare("SELECT COALESCE(stock,0) FROM products WHERE id=?");
-        $pstmt->bind_param("i", $pid);
-        $pstmt->execute();
-        $pstmt->bind_result($stock);
-        $pstmt->fetch();
-        $pstmt->close();
-        $current = (int)$_SESSION['cart'][$key]['quantity'];
-        if ($stock === null || $current >= (int)$stock) {
-          $_SESSION['flash'] = 'Reached available stock for ' . htmlspecialchars($item['name']);
+  $pid = intval($_GET['id']);
+  $action = $_GET['update'];
+  // Check stock
+  $stock = null;
+  $pstmt = $conn->prepare("SELECT COALESCE(stock,0) FROM products WHERE id=?");
+  $pstmt->bind_param("i", $pid);
+  $pstmt->execute();
+  $pstmt->bind_result($stock);
+  $pstmt->fetch();
+  $pstmt->close();
+
+  if (isset($_SESSION['user_id'])) {
+    $uid = $_SESSION['user_id'];
+    // get current quantity from DB
+    $qstmt = $conn->prepare("SELECT quantity FROM carts WHERE user_id = ? AND product_id = ?");
+    $qstmt->bind_param('ii', $uid, $pid);
+    $qstmt->execute();
+    $qstmt->bind_result($current);
+    $has = $qstmt->fetch();
+    $qstmt->close();
+    $current = $has ? (int)$current : 0;
+
+    if ($action === 'increase') {
+      if ($stock === null || $current >= (int)$stock) {
+        $_SESSION['flash'] = 'Reached available stock for this product';
+      } else {
+        if ($has) {
+          $ustmt = $conn->prepare("UPDATE carts SET quantity = quantity + 1 WHERE user_id = ? AND product_id = ?");
+          $ustmt->bind_param('ii', $uid, $pid);
+          $ustmt->execute();
+          $ustmt->close();
         } else {
-          $_SESSION['cart'][$key]['quantity'] = $current + 1;
+          $inst = $conn->prepare("INSERT INTO carts (user_id, product_id, quantity) VALUES (?, ?, 1)");
+          $inst->bind_param('ii', $uid, $pid);
+          $inst->execute();
+          $inst->close();
         }
-            } elseif ($_GET['update'] === 'decrease') {
-                $_SESSION['cart'][$key]['quantity']--;
-                if ($_SESSION['cart'][$key]['quantity'] <= 0) {
-                    unset($_SESSION['cart'][$key]);
-                }
-            }
+      }
+    } elseif ($action === 'decrease') {
+      if ($has && $current > 1) {
+        $dstmt = $conn->prepare("UPDATE carts SET quantity = quantity - 1 WHERE user_id = ? AND product_id = ?");
+        $dstmt->bind_param('ii', $uid, $pid);
+        $dstmt->execute();
+        $dstmt->close();
+      } elseif ($has && $current <= 1) {
+        $dstmt = $conn->prepare("DELETE FROM carts WHERE user_id = ? AND product_id = ?");
+        $dstmt->bind_param('ii', $uid, $pid);
+        $dstmt->execute();
+        $dstmt->close();
+      }
+    }
+
+    // Refresh session cart
+    sync_session_cart_from_db($conn, $uid);
+  } else {
+    // Guest cart - update session only
+    foreach ($_SESSION['cart'] as $key => $item) {
+      if ($item['id'] == $pid) {
+        if ($action === 'increase') {
+          $current = (int)$_SESSION['cart'][$key]['quantity'];
+          if ($stock === null || $current >= (int)$stock) {
+            $_SESSION['flash'] = 'Reached available stock for ' . htmlspecialchars($item['name']);
+          } else {
+            $_SESSION['cart'][$key]['quantity'] = $current + 1;
+          }
+        } elseif ($action === 'decrease') {
+          $_SESSION['cart'][$key]['quantity']--;
+          if ($_SESSION['cart'][$key]['quantity'] <= 0) {
+            unset($_SESSION['cart'][$key]);
+          }
         }
+      }
     }
     $_SESSION['cart'] = array_values($_SESSION['cart']); // reindex
-    header("Location: cart.php");
-    exit;
+  }
+
+  header("Location: cart.php");
+  exit;
 }
 ?>
 <!DOCTYPE html>
@@ -80,6 +162,8 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<?php include 'navbar.php'; ?>
 
 <div class="container my-5">
   <?php if (!empty($_SESSION['flash'])): ?>

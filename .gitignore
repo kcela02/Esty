@@ -1,0 +1,9 @@
+# Local PayMongo config files - contain secrets
+paymongo_config.php
+Esty/paymongo_config.php
+**/paymongo_config.php
+
+# XAMPP/IDE generated files
+*.log
+/.idea
+/.vscode

@@ -55,8 +55,8 @@ if ($statusFilter) {
     $params[] = $statusFilter;
     $types .= 's';
 } else {
-    // Default view shows pending and processing
-    $where[] = "status IN ('pending','processing')";
+    // Default view shows active orders including completed
+    $where[] = "status IN ('pending','processing','completed')";
 }
 if ($searchQuery !== '') { $where[] = '(customer_name LIKE ? OR email LIKE ?)'; $like = "%$searchQuery%"; $params[] = $like; $params[] = $like; $types .= 'ss'; }
 if ($dateFrom !== '') { $where[] = 'created_at >= ?'; $params[] = $dateFrom . ' 00:00:00'; $types .= 's'; }
@@ -175,6 +175,7 @@ $fetchStmt->close();
                         <th>ID</th>
                         <th>Customer</th>
                         <th>Email</th>
+                        <th>Payment</th>
                         <th>Status</th>
                         <th>Total</th>
                         <th>Date</th>
@@ -188,6 +189,7 @@ $fetchStmt->close();
                                 <td><?= (int)$row['id'] ?></td>
                                 <td><?= htmlspecialchars($row['customer_name'] ?? '') ?></td>
                                 <td><?= htmlspecialchars($row['email'] ?? '') ?></td>
+                                <td><?= htmlspecialchars($row['payment_method'] ?? '') ?></td>
                                 <td>
                                     <?php
                                         $statusClass = 'bg-' . htmlspecialchars(strtolower($row['status']));
@@ -212,11 +214,15 @@ $fetchStmt->close();
                                         </select>
                                         <button type="submit" name="update_status" class="btn btn-add btn-sm px-3 py-1">Update</button>
                                     </form>
+                                    <form method="POST" action="process_delete_order.php" class="d-inline ms-1" onsubmit="return confirm('Delete order #<?= (int)$row['id'] ?>? This will remove order items and backups.');">
+                                        <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
-                        <tr><td colspan="7" class="text-center text-muted py-4">No orders found.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-4">No orders found.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>

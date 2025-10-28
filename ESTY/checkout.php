@@ -72,8 +72,7 @@ foreach ($_SESSION['cart'] as $item) {
             <input type="text" id="name" name="name" class="form-control" required>
           </div>
           <div class="mb-3">
-            <label for="email" class="form-label">Email Address</label>
-            <input type="email" id="email" name="email" class="form-control" required>
+            <!-- Email removed: use account email on file for order updates/receipts -->
           </div>
           <div class="mb-3">
             <label for="address" class="form-label">Shipping Address</label>
@@ -85,7 +84,6 @@ foreach ($_SESSION['cart'] as $item) {
               <option value="">Select Payment</option>
               <option value="cod">Cash on Delivery</option>
               <option value="gcash">GCash</option>
-              <option value="card">Credit/Debit Card</option>
             </select>
           </div>
           <button type="submit" class="btn w-100">Place Order</button>

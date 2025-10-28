@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'db.php';
+require_once __DIR__ . '/user_activity_helpers.php';
 require 'config_email.php';
 
 // Check if user came from registration
@@ -46,17 +47,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $ins_stmt = $conn->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
                 $ins_stmt->bind_param("sss", $username, $email, $password);
                 
-                if ($ins_stmt->execute()) {
+        if ($ins_stmt->execute()) {
                     // Delete OTP record
                     $del_stmt = $conn->prepare("DELETE FROM user_otp_verifications WHERE email = ?");
                     $del_stmt->bind_param("s", $email);
                     $del_stmt->execute();
                     
-                    // Auto login
-                    $_SESSION['user_id'] = $ins_stmt->insert_id;
-                    $_SESSION['username'] = $username;
+          $newUserId = (int) $ins_stmt->insert_id;
+
+          // Auto login
+          $_SESSION['user_id'] = $newUserId;
+          $_SESSION['username'] = $username;
                     unset($_SESSION['otp_email']);
                     unset($_SESSION['registration_in_progress']);
+
+          logUserActivity($conn, $newUserId, 'account_created', 'Email verified and account created.');
+          logUserActivity($conn, $newUserId, 'login', 'Automatic login after registration.');
                     
                     // Redirect to index (normal registration), unless they came from checkout
                     if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {

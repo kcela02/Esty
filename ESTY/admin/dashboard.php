@@ -17,13 +17,13 @@ $low_stock_products->bind_param("i", $low_stock_threshold);
 $low_stock_products->execute();
 $low_stock_list = $low_stock_products->get_result();
 
-// Recent Orders
+// Recent Orders (include payment method)
 $recent_orders = $conn->query("
-    SELECT id, customer_name, total, status, created_at
-    FROM orders
-    WHERE status != 'completed'
-    ORDER BY created_at DESC
-    LIMIT 5
+  SELECT id, customer_name, payment_method, total, status, created_at
+  FROM orders
+  WHERE status != 'completed'
+  ORDER BY created_at DESC
+  LIMIT 5
 ");
 
 // Recently Added Products
@@ -242,6 +242,7 @@ $recent_products = $conn->query("
                 <tr>
                   <th>ID</th>
                   <th>Customer</th>
+                  <th>Payment</th>
                   <th>Total</th>
                   <th>Status</th>
                   <th>Date</th>
@@ -252,6 +253,7 @@ $recent_products = $conn->query("
                   <tr>
                     <td><?= $o['id']; ?></td>
                     <td><?= htmlspecialchars($o['customer_name']); ?></td>
+                    <td><?= htmlspecialchars($o['payment_method'] ?? ''); ?></td>
                     <td>₱<?= number_format($o['total'], 2); ?></td>
                     <td><span class="badge bg-<?= strtolower($o['status']); ?> px-3 py-2"><?= ucfirst($o['status']); ?></span></td>
                     <td><?= date("M d, Y", strtotime($o['created_at'])); ?></td>

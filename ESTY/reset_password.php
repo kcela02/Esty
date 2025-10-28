@@ -2,6 +2,7 @@
 session_start();
 require 'db.php';
 require 'config_email.php';
+require_once __DIR__ . '/user_activity_helpers.php';
 
 $message = "";
 $message_type = "";
@@ -136,6 +137,8 @@ if ($show_password_form && $_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST[
                 $delete_stmt = $conn->prepare("DELETE FROM password_resets WHERE reset_token = ?");
                 $delete_stmt->bind_param("s", $token);
                 $delete_stmt->execute();
+
+        logUserActivity($conn, (int) $user_id, 'profile_updated', 'Password reset via secure link.');
                 
                 $message = "Password reset successful! Redirecting to login in 3 seconds...";
                 $message_type = "success";

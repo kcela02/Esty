@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'db.php';
+require_once __DIR__ . '/user_activity_helpers.php';
 require 'config_email.php';
 
 // Check if user came from login
@@ -83,6 +84,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 unset($_SESSION['login_user_id']);
                 unset($_SESSION['login_email']);
                 unset($_SESSION['login_username']);
+                logUserActivity($conn, $user_id, 'login', 'Two-factor login verified.');
                 
                 // Redirect to index (normal login), unless they came from checkout
                 if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {

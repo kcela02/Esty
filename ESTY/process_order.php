@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once "db.php"; // database connection file
-include 'navbar.php';
+require_once __DIR__ . '/user_activity_helpers.php';
 // Ensure products table has `stock` column used by checkout validation
 if (!function_exists('ensureProductStockColumn')) {
   function ensureProductStockColumn(mysqli $conn): void {
@@ -21,12 +21,37 @@ if (!isset($_SESSION['cart']) || count($_SESSION['cart']) == 0) {
     exit();
 }
 
+$orderId = null;
+$pendingId = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Get form data
-    $name    = trim($_POST['name']);
-    $email   = trim($_POST['email']);
-    $address = trim($_POST['address']);
-    $payment = trim($_POST['payment']);
+  // Get form data
+  $name    = trim($_POST['name']);
+  $address = trim($_POST['address']);
+  $payment = trim($_POST['payment']);
+
+  $allowedPayments = ['cod', 'gcash'];
+  if (!in_array($payment, $allowedPayments, true)) {
+    $_SESSION['flash'] = 'Invalid payment method selected.';
+    header('Location: checkout.php');
+    exit;
+  }
+
+  // Determine customer email from logged-in user's account (do not accept arbitrary email from checkout form)
+  $email = null;
+  if (isset($_SESSION['user_id'])) {
+    $uid = intval($_SESSION['user_id']);
+    $ue = $conn->prepare("SELECT email FROM users WHERE id = ? LIMIT 1");
+    if ($ue) {
+      $ue->bind_param('i', $uid);
+      $ue->execute();
+      $ures = $ue->get_result();
+      $urow = $ures->fetch_assoc();
+      $ue->close();
+      $email = $urow['email'] ?? null;
+    }
+  }
+  // fallback: if email still null, leave as null (no customer notification)
 
     // Calculate total
     $grandTotal = 0;
@@ -56,9 +81,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       }
     }
 
-    // Insert into orders table
-    $stmt = $conn->prepare("INSERT INTO orders (customer_name, email, address, payment_method, total) VALUES (?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssssd", $name, $email, $address, $payment, $grandTotal);
+  // For immediate payments (non-GCash) we'll create the order now.
+  // For redirect-based payments (GCash via PayMongo) create a pending_order and redirect the user to PayMongo.
+  $userIdForOrder = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
+  if ($payment === 'gcash') {
+    // create a pending order record and store the cart JSON until payment is confirmed
+    $cart_json = json_encode($_SESSION['cart']);
+  // Save pending order using account email (may be null)
+  if ($userIdForOrder !== null) {
+    $pstmt = $conn->prepare("INSERT INTO pending_orders (customer_name, email, address, payment_method, total, cart_json, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $pstmt->bind_param('ssssdsi', $name, $email, $address, $payment, $grandTotal, $cart_json, $userIdForOrder);
+  } else {
+    $pstmt = $conn->prepare("INSERT INTO pending_orders (customer_name, email, address, payment_method, total, cart_json) VALUES (?, ?, ?, ?, ?, ?)");
+    $pstmt->bind_param('ssssds', $name, $email, $address, $payment, $grandTotal, $cart_json);
+  }
+    $pstmt->execute();
+    $pendingId = $pstmt->insert_id;
+    $pstmt->close();
+
+    $conn->commit();
+
+    if ($userIdForOrder !== null && $pendingId) {
+      $totalDisplay = number_format($grandTotal, 2);
+      logUserActivity($conn, $userIdForOrder, 'order_pending_payment', "Initiated GCash payment for pending order #{$pendingId} (₱{$totalDisplay}).");
+    }
+  } else {
+    // Insert into orders table (include user_id when available)
+    if ($userIdForOrder !== null) {
+      $stmt = $conn->prepare("INSERT INTO orders (customer_name, email, address, payment_method, total, user_id) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssdi", $name, $email, $address, $payment, $grandTotal, $userIdForOrder);
+    } else {
+      $stmt = $conn->prepare("INSERT INTO orders (customer_name, email, address, payment_method, total) VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssd", $name, $email, $address, $payment, $grandTotal);
+    }
     $stmt->execute();
     $orderId = $stmt->insert_id; // get last inserted order ID
 
@@ -77,10 +132,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $conn->commit();
+
+    if ($userIdForOrder !== null && $orderId) {
+      $totalDisplay = number_format($grandTotal, 2);
+      $paymentLabel = ucfirst($payment);
+      logUserActivity($conn, $userIdForOrder, 'order_placed', "Order #{$orderId} placed via {$paymentLabel} for ₱{$totalDisplay}.");
+    }
+  }
   } catch (Throwable $e) {
     $conn->rollback();
     $_SESSION['flash'] = 'Unable to place order at this time. Please try again.';
     header('Location: cart.php');
+    exit;
+  }
+  // create a safe cart backup for immediate order flows (restore if needed)
+  require_once __DIR__ . '/cart_helpers.php';
+  if (!empty($_SESSION['cart']) && !empty($orderId)) {
+    create_cart_backup($conn, intval($orderId), $_SESSION['cart']);
+  }
+
+    // If paying with GCash (PayMongo), redirect to PayMongo handler to create source & checkout
+  if ($payment === 'gcash') {
+    // Do NOT clear cart yet. We'll clear on webhook success. Redirect to PayMongo.
+    if (!empty($pendingId)) {
+      header('Location: paymongo.php?pending_id=' . intval($pendingId));
+    } else {
+      header('Location: paymongo.php?order_id=' . intval($orderId));
+    }
     exit;
   }
 
@@ -104,14 +182,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $subjectAdmin    = "New Order Received (#$orderId)";
     $headers = "From: no-reply@yourshop.com";
 
-    // Send email to customer
+  // Send email to customer (only if email exists on account)
+  if (!empty($email)) {
     @mail($email, $subjectCustomer, $orderDetails, $headers);
+  }
 
     // Send email copy to shop owner
     @mail("youremail@example.com", $subjectAdmin, $orderDetails, $headers);
 
-  // Clear cart
-  unset($_SESSION['cart']);
+  // Clear cart for non-GCash payments (immediate confirmation)
+  if ($payment !== 'gcash') {
+    // Also remove DB cart rows for logged-in users
+    if (isset($_SESSION['user_id'])) {
+        $uid = $_SESSION['user_id'];
+        $dstmt = $conn->prepare("DELETE FROM carts WHERE user_id = ?");
+        $dstmt->bind_param('i', $uid);
+        $dstmt->execute();
+        $dstmt->close();
+    }
+    unset($_SESSION['cart']);
+  }
 }
 ?>
 <!DOCTYPE html>
@@ -126,11 +216,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 
+<?php include 'navbar.php'; ?>
+
 <div class="container my-5">
   <div class="empty-cart text-center p-5">
     <h2 class="mb-3">🎉 Order Confirmed!</h2>
     <p>Thank you <strong><?php echo htmlspecialchars($name); ?></strong> for your order.</p>
+  <?php if (!empty($email)): ?>
     <p>A copy of your order has been sent to <strong><?php echo htmlspecialchars($email); ?></strong>.</p>
+  <?php else: ?>
+    <p>A copy of your order will be sent to the email address on your account when available.</p>
+  <?php endif; ?>
     <p class="mb-4">We’ll notify you once your order is ready for delivery.</p>
     <a href="index.php" class="btn btn-pastel">🛍️ Continue Shopping</a>
   </div>

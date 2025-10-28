@@ -1,11 +1,8 @@
 <?php
-session_start();
-require '../db.php';
+require_once __DIR__ . '/session_bootstrap.php';
+require_once __DIR__ . '/../db.php';
 
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    header('Location: login.php');
-    exit;
-}
+requireAdminLogin();
 
 // Add/Edit Brand
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_brand') {
@@ -62,61 +59,64 @@ while ($row = $result->fetch_assoc()) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage Brands - Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Manage Brands - Admin</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+        <link rel="stylesheet" href="admin-style.css">
 </head>
 <body>
 <?php include 'sidebar.php'; ?>
 
-<div class="container-fluid">
-    <div class="col-md-9 ms-sm-auto px-md-4">
-        <div class="d-flex justify-content-between align-items-center my-4">
-            <h2>Brands</h2>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#brandModal">
-                <i class="bi bi-plus"></i> Add Brand
-            </button>
-        </div>
-
-        <?php if (!empty($_SESSION['message'])): ?>
-            <div class="alert alert-<?= $_SESSION['msg_type']; ?>">
-                <?= $_SESSION['message']; ?>
+<div class="main-content">
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="fw-bold mb-0">Brands</h2>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#brandModal">
+                    <i class="bi bi-plus"></i> Add Brand
+                </button>
             </div>
-            <?php unset($_SESSION['message'], $_SESSION['msg_type']); ?>
-        <?php endif; ?>
 
-        <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Description</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($brands as $brand): ?>
+            <?php if (!empty($_SESSION['message'])): ?>
+                <div class="alert alert-<?= $_SESSION['msg_type']; ?>">
+                    <?= $_SESSION['message']; ?>
+                </div>
+                <?php unset($_SESSION['message'], $_SESSION['msg_type']); ?>
+            <?php endif; ?>
+
+            <div class="table-responsive">
+                <table class="table table-striped align-middle mb-0">
+                    <thead>
                         <tr>
-                            <td><?= htmlspecialchars($brand['name']); ?></td>
-                            <td><?= htmlspecialchars(substr($brand['description'] ?? '', 0, 60)); ?></td>
-                            <td>
-                                <button class="btn btn-sm btn-warning" onclick="editBrand(<?= htmlspecialchars(json_encode($brand)); ?>)">
-                                    <i class="bi bi-pencil"></i> Edit
-                                </button>
-                                <form method="POST" style="display:inline;">
-                                    <input type="hidden" name="action" value="delete_brand">
-                                    <input type="hidden" name="id" value="<?= $brand['id']; ?>">
-                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this brand?');">
-                                        <i class="bi bi-trash"></i> Delete
-                                    </button>
-                                </form>
-                            </td>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Actions</th>
                         </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($brands as $brand): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($brand['name']); ?></td>
+                                <td><?= htmlspecialchars(substr($brand['description'] ?? '', 0, 60)); ?></td>
+                                <td>
+                                    <button class="btn btn-sm btn-warning" onclick="editBrand(<?= htmlspecialchars(json_encode($brand)); ?>)">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </button>
+                                    <form method="POST" style="display:inline;">
+                                        <input type="hidden" name="action" value="delete_brand">
+                                        <input type="hidden" name="id" value="<?= $brand['id']; ?>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this brand?');">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
