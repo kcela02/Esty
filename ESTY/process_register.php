@@ -80,11 +80,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $_SESSION['otp_email'] = $email;
             $_SESSION['registration_in_progress'] = true;
             
-            echo json_encode([
-                'success' => true, 
+            // For the modal flow don't force the client to navigate to the standalone verify page.
+            $response = [
+                'success' => true,
                 'message' => 'Account created! Please verify your email',
-                'redirect' => 'verify_registration_otp.php'
-            ]);
+                'redirect' => ''
+            ];
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                $response['debug_otp'] = getDebugOtp($email);
+            }
+            echo json_encode($response);
         } else {
             echo json_encode(['success' => false, 'message' => 'Error sending verification email. Please try again.']);
             // Clean up if email fails

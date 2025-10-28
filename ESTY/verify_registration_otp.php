@@ -4,6 +4,9 @@ require 'db.php';
 require_once __DIR__ . '/user_activity_helpers.php';
 require 'config_email.php';
 
+// Detect AJAX requests (so modal can post and receive JSON)
+$isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
 // Check if user came from registration
 if (!isset($_SESSION['registration_in_progress']) || !isset($_SESSION['otp_email'])) {
     header('Location: register.php');
@@ -28,7 +31,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt->execute();
         $result = $stmt->get_result();
         
-        if ($result->num_rows == 1) {
+    if ($result->num_rows == 1) {
             $row = $result->fetch_assoc();
             $stored_otp = $row['otp'];
             $username = $row['username'];
@@ -36,47 +39,63 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $attempts = $row['attempts'];
             
             // Check attempts
-            if ($attempts >= 5) {
-                $message = "Too many failed attempts. Please register again.";
-                // Delete expired/failed OTP
-                $stmt = $conn->prepare("DELETE FROM user_otp_verifications WHERE email = ?");
-                $stmt->bind_param("s", $email);
-                $stmt->execute();
-            } elseif ($otp_input === $stored_otp) {
-                // OTP is correct - Create user account
-                $ins_stmt = $conn->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
-                $ins_stmt->bind_param("sss", $username, $email, $password);
-                
+      if ($attempts >= 5) {
+        $message = "Too many failed attempts. Please register again.";
+        // Delete expired/failed OTP
+        $stmt = $conn->prepare("DELETE FROM user_otp_verifications WHERE email = ?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+      } elseif ($otp_input === $stored_otp) {
+        // OTP is correct - Create user account
+        $ins_stmt = $conn->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
+        $ins_stmt->bind_param("sss", $username, $email, $password);
+
         if ($ins_stmt->execute()) {
-                    // Delete OTP record
-                    $del_stmt = $conn->prepare("DELETE FROM user_otp_verifications WHERE email = ?");
-                    $del_stmt->bind_param("s", $email);
-                    $del_stmt->execute();
-                    
+          // Delete OTP record
+          $del_stmt = $conn->prepare("DELETE FROM user_otp_verifications WHERE email = ?");
+          $del_stmt->bind_param("s", $email);
+          $del_stmt->execute();
+
           $newUserId = (int) $ins_stmt->insert_id;
 
           // Auto login
           $_SESSION['user_id'] = $newUserId;
           $_SESSION['username'] = $username;
-                    unset($_SESSION['otp_email']);
-                    unset($_SESSION['registration_in_progress']);
+          unset($_SESSION['otp_email']);
+          unset($_SESSION['registration_in_progress']);
 
           logUserActivity($conn, $newUserId, 'account_created', 'Email verified and account created.');
           logUserActivity($conn, $newUserId, 'login', 'Automatic login after registration.');
-                    
-                    // Redirect to index (normal registration), unless they came from checkout
-                    if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {
-                        unset($_SESSION['redirect_after_login']);
-                        header("Location: checkout.php");
-                    } else {
-                        header("Location: index.php");
-                    }
-                    exit;
-                } else {
-                    $message = "Error creating account. Please try again.";
-                }
-                $ins_stmt->close();
+
+          // Determine redirect target
+          if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {
+            $redirectTarget = 'checkout.php';
+            unset($_SESSION['redirect_after_login']);
+          } else {
+            $redirectTarget = 'index.php';
+          }
+
+          // For AJAX requests return JSON; otherwise perform a normal redirect
+          if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => true, 'message' => 'Registration verified', 'redirect' => $redirectTarget]);
+            $ins_stmt->close();
+            $del_stmt->close();
+            exit;
+          } else {
+            if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {
+              unset($_SESSION['redirect_after_login']);
+              header("Location: checkout.php");
             } else {
+              header("Location: index.php");
+            }
+            exit;
+          }
+        } else {
+          $message = "Error creating account. Please try again.";
+        }
+        $ins_stmt->close();
+      } else {
                 // Wrong OTP - Increment attempts
                 $new_attempts = $attempts + 1;
                 $update_stmt = $conn->prepare("UPDATE user_otp_verifications SET attempts = ? WHERE email = ?");
@@ -92,6 +111,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         $stmt->close();
     }
+
+  // If this was an AJAX POST, return JSON with the current message (success=false)
+  if ($isAjax) {
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'message' => $message]);
+    exit;
+  }
 }
 
 // Show time remaining

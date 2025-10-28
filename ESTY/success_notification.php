@@ -30,8 +30,8 @@ if (!empty($flash_message)) {
                 error_log("Database error in success_notification.php: " . $conn->error);
             }
         } elseif (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
+            $cart_count = count($_SESSION['cart']);
             foreach ($_SESSION['cart'] as $item) {
-                $cart_count += $item['quantity'];
                 $cart_total += $item['price'] * $item['quantity'];
             }
         }

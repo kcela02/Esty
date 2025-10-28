@@ -47,13 +47,23 @@
 
 
         <!-- Cart Icon -->
-            <a href="cart.php" class="text-dark fs-5 position-relative" title="Shopping Cart">
+            <a href="#" class="text-dark fs-5 position-relative" title="Shopping Cart" data-bs-toggle="offcanvas" data-bs-target="#cartOffcanvas" aria-controls="cartOffcanvas" id="cartIconLink">
               <i class="bi bi-cart"></i>
-              <?php if (!empty($_SESSION['cart'])): ?>
+              <?php
+                // Compute authoritative cart quantity: sum of quantities from DB (logged-in) or session (guest)
+                $cart_qty = 0;
+                if (isset($_SESSION['user_id'])) {
+                    $res = $conn->query("SELECT COALESCE(SUM(quantity),0) as qty FROM carts WHERE user_id = " . intval($_SESSION['user_id']));
+                    if ($res) { $r = $res->fetch_assoc(); $cart_qty = $r['qty'] ?? 0; }
+                } else if (!empty($_SESSION['cart'])) {
+                    foreach ($_SESSION['cart'] as $item) { $cart_qty += (int)($item['quantity'] ?? 0); }
+                }
+                if ($cart_qty > 0):
+              ?>
                 <span class="badge bg-danger position-absolute top-0 start-100 translate-middle"
                       style="width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%;
                              font-size: 0.6rem;">
-                  <?= array_sum(array_column($_SESSION['cart'], 'quantity')); ?>
+                  <?= $cart_qty; ?>
                 </span>
               <?php endif; ?>
             </a>
@@ -77,3 +87,7 @@
 
 <!-- Include Login/Register Modals ONLY on pages that need them (cart.php, checkout.php) -->
 <!-- DO NOT include on index.php to prevent modal from showing when adding to cart -->
+<!-- Ensure the cart offcanvas is available on every page that includes the navbar -->
+<?php if (file_exists(__DIR__ . '/cart_offcanvas.php')): ?>
+  <?php include __DIR__ . '/cart_offcanvas.php'; ?>
+<?php endif; ?>

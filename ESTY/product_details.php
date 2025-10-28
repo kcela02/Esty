@@ -1,106 +1,4 @@
 <?php
-session_start();
-require 'db.php';
-include 'navbar.php';
-
-$product_id = intval($_GET['id'] ?? 0);
-
-if ($product_id <= 0) {
-    header('Location: products.php');
-    exit;
-}
-
-// Fetch product with category, brand, and rating info
-$stmt = $conn->prepare("
-    SELECT 
-        p.id, p.name, p.description, p.price, p.image, p.stock,
-        c.name as category_name, b.name as brand_name,
-        COALESCE(pr.average_rating, 0) as average_rating,
-        COALESCE(pr.review_count, 0) as review_count
-    FROM products p
-    LEFT JOIN categories c ON p.category_id = c.id
-    LEFT JOIN brands b ON p.brand_id = b.id
-    LEFT JOIN product_ratings pr ON p.id = pr.product_id
-    WHERE p.id = ?
-");
-$stmt->bind_param("i", $product_id);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result->num_rows === 0) {
-    header('Location: products.php');
-    exit;
-}
-
-$product = $result->fetch_assoc();
-$stmt->close();
-
-// Fetch reviews
-$reviews = [];
-$stmt = $conn->prepare("
-    SELECT r.id, r.rating, r.title, r.comment, r.created_at, u.username
-    FROM product_reviews r
-    JOIN users u ON r.user_id = u.id
-    WHERE r.product_id = ?
-    ORDER BY r.created_at DESC
-");
-$stmt->bind_param("i", $product_id);
-$stmt->execute();
-$result = $stmt->get_result();
-while ($row = $result->fetch_assoc()) {
-    $reviews[] = $row;
-}
-$stmt->close();
-
-// Check if user already reviewed
-$user_already_reviewed = false;
-$user_has_purchased = false;
-
-if (isset($_SESSION['user_id'])) {
-    $stmt = $conn->prepare("SELECT id FROM product_reviews WHERE product_id = ? AND user_id = ?");
-    $stmt->bind_param("ii", $product_id, $_SESSION['user_id']);
-    $stmt->execute();
-    $stmt->store_result();
-    $user_already_reviewed = $stmt->num_rows > 0;
-    $stmt->close();
-    
-    // For now, allow all logged-in users to review (no purchase check needed)
-    // To enable purchase verification, add user_id column to orders table
-    $user_has_purchased = true;
-}
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($product['name']); ?> - Esty Scents</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css">
-    <style>
-        .product-image { max-height: 400px; object-fit: cover; border-radius: 10px; }
-        .stars { color: rgb(251, 191, 36); font-size: 1.1rem; }
-        .review-card { border-left: 4px solid rgb(201, 166, 70); padding: 15px; margin: 15px 0; background: rgb(249, 250, 251); border-radius: 5px; }
-        .rating-input { font-size: 2rem; cursor: pointer; }
-        .rating-input i { color: rgb(200, 200, 200); transition: 0.2s; }
-        .rating-input i.active { color: rgb(251, 191, 36); }
-    </style>
-</head>
-<body style="padding-top: 70px;">
-
-<!-- Success Notification -->
-<?php include 'success_notification.php'; ?>
-
-<main style="flex: 1;">
-<section class="container my-5">
-    <div class="row">
-        <!-- Product Image -->
-        <div class="col-md-5">
-            <img src="<?= htmlspecialchars($product['image']); ?>" alt="<?= htmlspecialchars($product['name']); ?>" class="product-image w-100">
-        </div>
-
-        <!-- Product Details -->
         <div class="col-md-7">
             <h2><?= htmlspecialchars($product['name']); ?></h2>
             
@@ -251,6 +149,7 @@ if (isset($_SESSION['user_id'])) {
 <!-- Include modals for login if needed -->
 <?php if (!isset($_SESSION['user_id'])): ?>
     <?php include 'login_register_modals.php'; ?>
+    <?php include 'cart_offcanvas.php'; ?>
 <?php endif; ?>
 
 <!-- Footer -->
@@ -435,6 +334,11 @@ window.addEventListener('load', function() {
 function addToCartAjax(productId, productName, price, image) {
     console.log('Adding to cart:', productId, productName);
     
+    // Disable button to prevent double-click
+    var btn = event.target;
+    if (btn.tagName !== 'BUTTON') btn = btn.closest('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+    
     const formData = new FormData();
     formData.append('id', productId);
     formData.append('name', productName);
@@ -454,8 +358,31 @@ function addToCartAjax(productId, productName, price, image) {
     .then(data => {
         console.log('Response data:', data);
         if (data.success) {
-            // Reload to show notification
-            location.reload();
+            // Update navbar badge quantity from server-provided cart_qty
+            try {
+                var qty = parseInt(data.cart_qty) || 0;
+                var cartLink = document.getElementById('cartIconLink');
+                if (cartLink) {
+                    var badge = cartLink.querySelector('.badge');
+                    if (!badge && qty > 0) {
+                        badge = document.createElement('span');
+                        badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
+                        badge.style.width = '18px';
+                        badge.style.height = '18px';
+                        badge.style.display = 'flex';
+                        badge.style.alignItems = 'center';
+                        badge.style.justifyContent = 'center';
+                        badge.style.fontSize = '0.6rem';
+                        badge.style.borderRadius = '50%';
+                        cartLink.appendChild(badge);
+                    }
+                    if (badge) {
+                        badge.textContent = qty > 0 ? qty : '';
+                        badge.style.display = qty > 0 ? 'flex' : 'none';
+                    }
+                }
+            } catch(e) { console.warn(e); }
+            window.location.reload();
         } else {
             alert(data.message || 'Error adding to cart');
         }
@@ -463,6 +390,10 @@ function addToCartAjax(productId, productName, price, image) {
     .catch(err => {
         console.error('Error:', err);
         alert('Error adding to cart: ' + err);
+    })
+    .finally(() => {
+        // Re-enable button
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     });
 }
 </script>

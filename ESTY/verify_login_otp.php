@@ -4,6 +4,9 @@ require 'db.php';
 require_once __DIR__ . '/user_activity_helpers.php';
 require 'config_email.php';
 
+// Detect AJAX requests (so modal can post and receive JSON)
+$isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (isset($_SERVER['HTTP_ACCEPT']) && strpos($_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
 // Check if user came from login
 if (!isset($_SESSION['login_user_id']) || !isset($_SESSION['login_email'])) {
     header('Location: login.php');
@@ -23,93 +26,106 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     } elseif (strlen($otp_input) != 6 || !ctype_digit($otp_input)) {
         $message = "Code must be 6 digits.";
     } else {
-        // Verify OTP
-        $stmt = $conn->prepare("SELECT id, otp, attempts, expires_at FROM login_otp_verifications WHERE user_id = ? AND expires_at > NOW()");
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($result->num_rows == 1) {
-            $row = $result->fetch_assoc();
-            $stored_otp = $row['otp'];
-            $attempts = $row['attempts'];
-            
-            // Check attempts
-            if ($attempts >= 5) {
-                $message = "Too many failed attempts. Please login again.";
-                // Delete expired/failed OTP
-                $stmt = $conn->prepare("DELETE FROM login_otp_verifications WHERE user_id = ?");
-                $stmt->bind_param("i", $user_id);
-                $stmt->execute();
-                
-                // Clear session
-                unset($_SESSION['login_user_id']);
-                unset($_SESSION['login_email']);
-                unset($_SESSION['login_username']);
-            } elseif ($otp_input === $stored_otp) {
-                // OTP is correct - Complete login
-                // Delete OTP record
-                $del_stmt = $conn->prepare("DELETE FROM login_otp_verifications WHERE user_id = ?");
-                $del_stmt->bind_param("i", $user_id);
-                $del_stmt->execute();
-                
-                // Set session
-                $_SESSION['user_id'] = $user_id;
-                $_SESSION['username'] = $username;
-                
-                // Load user's cart
-                $_SESSION['cart'] = [];
-                
-                $cart_stmt = $conn->prepare("
-                    SELECT c.product_id, c.quantity, p.name, p.price
-                    FROM carts c
-                    JOIN products p ON c.product_id = p.id
-                    WHERE c.user_id = ?
-                ");
-                $cart_stmt->bind_param("i", $user_id);
-                $cart_stmt->execute();
-                $cart_result = $cart_stmt->get_result();
-                
-                while ($cart_row = $cart_result->fetch_assoc()) {
-                    $_SESSION['cart'][] = [
-                        'id' => $cart_row['product_id'],
-                        'name' => $cart_row['name'],
-                        'price' => $cart_row['price'],
-                        'quantity' => $cart_row['quantity']
-                    ];
-                }
-                $cart_stmt->close();
-                
-                // Clear temporary session variables
-                unset($_SESSION['login_user_id']);
-                unset($_SESSION['login_email']);
-                unset($_SESSION['login_username']);
-                logUserActivity($conn, $user_id, 'login', 'Two-factor login verified.');
-                
-                // Redirect to index (normal login), unless they came from checkout
-                if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {
-                    unset($_SESSION['redirect_after_login']);
-                    header("Location: checkout.php");
-                } else {
-                    header("Location: index.php");
-                }
-                exit;
-            } else {
-                // Wrong OTP - Increment attempts
-                $new_attempts = $attempts + 1;
-                $update_stmt = $conn->prepare("UPDATE login_otp_verifications SET attempts = ? WHERE user_id = ?");
-                $update_stmt->bind_param("ii", $new_attempts, $user_id);
-                $update_stmt->execute();
-                $update_stmt->close();
-                
-                $remaining = 5 - $new_attempts;
-                $message = "Invalid code. " . ($remaining > 0 ? "You have " . $remaining . " attempts remaining." : "Too many attempts. Please login again.");
-            }
-        } else {
-            $message = "Code expired. Please login again.";
+    // Verify OTP
+    $stmt = $conn->prepare("SELECT id, otp, attempts, expires_at FROM login_otp_verifications WHERE user_id = ? AND expires_at > NOW()");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows == 1) {
+      $row = $result->fetch_assoc();
+      $stored_otp = $row['otp'];
+      $attempts = $row['attempts'];
+
+      // Check attempts
+      if ($attempts >= 5) {
+        $message = "Too many failed attempts. Please login again.";
+        // Delete expired/failed OTP
+        $delAll = $conn->prepare("DELETE FROM login_otp_verifications WHERE user_id = ?");
+        $delAll->bind_param("i", $user_id);
+        $delAll->execute();
+
+        // Clear session
+        unset($_SESSION['login_user_id']);
+        unset($_SESSION['login_email']);
+        unset($_SESSION['login_username']);
+      } elseif ($otp_input === $stored_otp) {
+        // OTP is correct - Complete login
+        // Delete OTP record
+        $del_stmt = $conn->prepare("DELETE FROM login_otp_verifications WHERE user_id = ?");
+        $del_stmt->bind_param("i", $user_id);
+        $del_stmt->execute();
+
+        // Set session
+        $_SESSION['user_id'] = $user_id;
+        $_SESSION['username'] = $username;
+
+        // Load user's cart
+        $_SESSION['cart'] = [];
+
+        $cart_stmt = $conn->prepare("SELECT c.product_id, c.quantity, p.name, p.price FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = ?");
+        $cart_stmt->bind_param("i", $user_id);
+        $cart_stmt->execute();
+        $cart_result = $cart_stmt->get_result();
+
+        while ($cart_row = $cart_result->fetch_assoc()) {
+          $_SESSION['cart'][] = [
+            'id' => $cart_row['product_id'],
+            'name' => $cart_row['name'],
+            'price' => $cart_row['price'],
+            'quantity' => $cart_row['quantity']
+          ];
         }
-        $stmt->close();
+        $cart_stmt->close();
+
+        // Clear temporary session variables
+        unset($_SESSION['login_user_id']);
+        unset($_SESSION['login_email']);
+        unset($_SESSION['login_username']);
+        logUserActivity($conn, $user_id, 'login', 'Two-factor login verified.');
+
+        // Determine redirect target
+        if (isset($_SESSION['redirect_after_login']) && $_SESSION['redirect_after_login'] === 'checkout') {
+          $redirectTarget = 'checkout.php';
+          unset($_SESSION['redirect_after_login']);
+        } else {
+          $redirectTarget = 'index.php';
+        }
+
+        // For AJAX requests return JSON; otherwise perform a normal redirect
+        if ($isAjax) {
+          header('Content-Type: application/json');
+          echo json_encode(['success' => true, 'message' => 'Login verified', 'redirect' => $redirectTarget]);
+          $stmt->close();
+          $del_stmt->close();
+          exit;
+        } else {
+          header("Location: " . $redirectTarget);
+          exit;
+        }
+      } else {
+        // Wrong OTP - Increment attempts
+        $new_attempts = $attempts + 1;
+        $update_stmt = $conn->prepare("UPDATE login_otp_verifications SET attempts = ? WHERE user_id = ?");
+        $update_stmt->bind_param("ii", $new_attempts, $user_id);
+        $update_stmt->execute();
+        $update_stmt->close();
+
+        $remaining = 5 - $new_attempts;
+        $message = "Invalid code. " . ($remaining > 0 ? "You have " . $remaining . " attempts remaining." : "Too many attempts. Please login again.");
+      }
+    } else {
+      $message = "Code expired. Please login again.";
     }
+    $stmt->close();
+    }
+
+  // If this was an AJAX POST, return JSON with the current message (success=false)
+  if ($isAjax) {
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'message' => $message]);
+    exit;
+  }
 }
 
 // Show time remaining

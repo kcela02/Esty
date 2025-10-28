@@ -468,3 +468,76 @@ form.addEventListener('submit', function(e) {
 
 </body>
 </html>
+
+<?php // Include modals so verify-registration modal exists on this page ?>
+<?php include_once __DIR__ . '/login_register_modals.php'; ?>
+
+<script>
+// Intercept full-page register form to use AJAX + modal OTP flow
+document.getElementById('registerForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const confirm_password = document.getElementById('confirm_password').value;
+
+  // Basic client-side validation (preserve existing checks)
+  if (!username || !email || !password || !confirm_password) {
+    // let existing validation show messages
+    return;
+  }
+
+  const submitBtn = this.querySelector('.submit-btn');
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Creating...';
+
+  const body = 'username=' + encodeURIComponent(username)
+    + '&email=' + encodeURIComponent(email)
+    + '&password=' + encodeURIComponent(password)
+    + '&confirm_password=' + encodeURIComponent(confirm_password);
+
+  fetch('process_register.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    body: body
+  })
+  .then(r => r.json())
+  .then(data => {
+    console.log('[page register] process_register response:', data);
+    if (data.success) {
+      const verifyModal = new bootstrap.Modal(document.getElementById('verifyRegistrationModal'));
+      const emailEl = document.querySelector('#verifyRegistrationModal .otp-email');
+      if (emailEl) emailEl.textContent = email;
+      verifyModal.show();
+      if (data.debug_otp) {
+        const debugHtml = `<div class="alert alert-warning alert-in-modal"><strong>DEBUG MODE ENABLED</strong><br>Your OTP Code: <span style="font-family: monospace; background:#fff3cd; padding:2px 6px; border-radius:3px;">${data.debug_otp}</span></div>`;
+        const msgDiv = document.getElementById('verifyRegisterMessage');
+        if (msgDiv) msgDiv.innerHTML = debugHtml;
+      }
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-person-plus"></i> Create Account';
+    } else {
+      document.querySelector('.alert-error')?.remove();
+      const error = document.createElement('div');
+      error.className = 'alert-error';
+      error.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> <span>' + (data.message || 'Registration failed') + '</span>';
+      document.querySelector('.auth-body').insertBefore(error, document.querySelector('form'));
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-person-plus"></i> Create Account';
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    document.querySelector('.alert-error')?.remove();
+    const error = document.createElement('div');
+    error.className = 'alert-error';
+    error.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> <span>An error occurred. Please try again.</span>';
+    document.querySelector('.auth-body').insertBefore(error, document.querySelector('form'));
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<i class="bi bi-person-plus"></i> Create Account';
+  });
+});
+</script>

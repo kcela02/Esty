@@ -17,6 +17,29 @@ if (isset($_SESSION['user_id'])) {
 if (isset($_POST['add_to_cart']) && isset($_POST['ajax']) && $_POST['ajax'] === 'true') {
     $product_id = intval($_POST['id']);
 
+    // DEBUG: Log add-to-cart attempt
+    $debug_log = fopen(__DIR__ . '/logs/cart_debug.log', 'a');
+    if ($debug_log) {
+        $session_qty = 0;
+        foreach ($_SESSION['cart'] as $item) { $session_qty += (int)($item['quantity'] ?? 0); }
+        $db_qty = 0;
+        if (isset($_SESSION['user_id'])) {
+            $dq = $conn->query("SELECT COALESCE(SUM(quantity),0) as qty FROM carts WHERE user_id = " . intval($_SESSION['user_id']));
+            if ($dq) { $dr = $dq->fetch_assoc(); $db_qty = $dr['qty']; }
+        }
+        fwrite($debug_log, json_encode(['time' => date('Y-m-d H:i:s'), 'type' => 'AJAX_add', 'product_id' => $product_id, 'session_id' => session_id(), 'user_id' => $_SESSION['user_id'] ?? null, 'session_qty' => $session_qty, 'db_qty' => $db_qty]) . "\n");
+        fclose($debug_log);
+    }
+
+    // Simple duplicate-submit guard: ignore immediate repeat adds for same product (debounce 2s)
+    if (!isset($_SESSION['recent_adds'])) $_SESSION['recent_adds'] = [];
+    $last = (int)($_SESSION['recent_adds'][$product_id] ?? 0);
+    if (time() - $last < 2) {
+    header('Content-Type: application/json');
+    echo json_encode(['success' => true, 'message' => 'Already added', 'cart_count' => isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0]);
+    exit;
+  }
+
     // Fetch product data
     $stock = null; $product_name = null; $price = null; $image = null;
     $pstmt = $conn->prepare("SELECT name, price, COALESCE(stock, 0) as stock, image FROM products WHERE id = ?");
@@ -135,20 +158,24 @@ if (isset($_POST['add_to_cart']) && isset($_POST['ajax']) && $_POST['ajax'] === 
     // Calculate cart totals
     $cart_count = 0;
     $cart_total = 0;
+  $cart_qty = 0;
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
-        $result = $conn->query("SELECT SUM(p.price * c.quantity) as total, COUNT(c.id) as count FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = $user_id");
+    $result = $conn->query("SELECT SUM(p.price * c.quantity) as total, COUNT(c.id) as count, COALESCE(SUM(c.quantity),0) as qty FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = $user_id");
         if ($result) {
             $row = $result->fetch_assoc();
             $cart_count = $row['count'] ?? 0;
             $cart_total = $row['total'] ?? 0;
+      $cart_qty = $row['qty'] ?? 0;
         }
     } else if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
-        $cart_count = count($_SESSION['cart']);
-        $cart_total = 0;
-        foreach ($_SESSION['cart'] as $item) {
-            $cart_total += $item['price'] * $item['quantity'];
-        }
+    $cart_count = count($_SESSION['cart']);
+    $cart_total = 0;
+    $cart_qty = 0;
+    foreach ($_SESSION['cart'] as $item) {
+      $cart_total += $item['price'] * $item['quantity'];
+      $cart_qty += (int)($item['quantity'] ?? 0);
+    }
     }
 
     // Return JSON response
@@ -157,15 +184,41 @@ if (isset($_POST['add_to_cart']) && isset($_POST['ajax']) && $_POST['ajax'] === 
         'success' => isset($_SESSION['flash_type']) && $_SESSION['flash_type'] === 'success',
         'message' => $_SESSION['flash'] ?? '',
         'product_name' => $_SESSION['last_product_name'] ?? '',
-        'cart_count' => $cart_count,
-        'cart_total' => $cart_total
+    'cart_count' => $cart_count,
+    'cart_total' => $cart_total,
+    'cart_qty' => $cart_qty
     ]);
+  // record last added time for this product for debounce
+  if (!isset($_SESSION['recent_adds'])) $_SESSION['recent_adds'] = [];
+  $_SESSION['recent_adds'][$product_id] = time();
     exit;
 }
 
 // Handle regular form submissions (non-AJAX)
 if (isset($_POST['add_to_cart']) && (!isset($_POST['ajax']) || $_POST['ajax'] !== 'true')) {
     $product_id = intval($_POST['id']);
+
+    // DEBUG: Log add-to-cart attempt
+    $debug_log = fopen(__DIR__ . '/logs/cart_debug.log', 'a');
+    if ($debug_log) {
+        $session_qty = 0;
+        foreach ($_SESSION['cart'] as $item) { $session_qty += (int)($item['quantity'] ?? 0); }
+        $db_qty = 0;
+        if (isset($_SESSION['user_id'])) {
+            $dq = $conn->query("SELECT COALESCE(SUM(quantity),0) as qty FROM carts WHERE user_id = " . intval($_SESSION['user_id']));
+            if ($dq) { $dr = $dq->fetch_assoc(); $db_qty = $dr['qty']; }
+        }
+        fwrite($debug_log, json_encode(['time' => date('Y-m-d H:i:s'), 'type' => 'FORM_add', 'product_id' => $product_id, 'session_id' => session_id(), 'user_id' => $_SESSION['user_id'] ?? null, 'session_qty' => $session_qty, 'db_qty' => $db_qty]) . "\n");
+        fclose($debug_log);
+    }
+
+    // Simple duplicate-submit guard for non-AJAX flows as well (2s)
+    if (!isset($_SESSION['recent_adds'])) $_SESSION['recent_adds'] = [];
+    $last = (int)($_SESSION['recent_adds'][$product_id] ?? 0);
+    if (time() - $last < 2) {
+    header("Location: " . $_SERVER['HTTP_REFERER']);
+    exit;
+  }
 
     // Fetch product data
     $stock = null; $product_name = null; $price = null; $image = null;
@@ -399,19 +452,15 @@ if ($result_all && $result_all->num_rows > 0) {
                   <?php endif; ?>
                 </p>
               </div>
-              <form method="POST">
-                <input type="hidden" name="id" value="<?= $p['id']; ?>">
-                <input type="hidden" name="name" value="<?= htmlspecialchars($p['name']); ?>">
-                <input type="hidden" name="price" value="<?= $p['price']; ?>">
-                <div class="d-grid gap-2">
-                    <button type="submit" name="add_to_cart" class="btn btn-primary" <?= ($stock !== null && $stock <= 0) ? 'disabled' : '' ?>>
+              <div class="d-grid gap-2">
+                    <button type="button" onclick="addToCartAjax(<?= $p['id']; ?>, '<?= htmlspecialchars($p['name']); ?>', <?= $p['price']; ?>, '<?= htmlspecialchars($p['image']); ?>')" 
+                            class="btn btn-primary" <?= ($stock !== null && $stock <= 0) ? 'disabled' : '' ?>>
                       <i class="bi bi-cart-plus"></i> Add to Cart
                     </button>
                     <a href="product_details.php?id=<?= $p['id']; ?>" class="btn btn-secondary btn-sm">
                       <i class="bi bi-eye"></i> View Details
                     </a>
                 </div>
-              </form>
             </div>
           </div>
         </div>
@@ -458,10 +507,76 @@ document.getElementById('newsletterForm').addEventListener('submit', function(e)
         messageEl.className = 'text-danger mt-3';
     });
 });
+
+function addToCartAjax(productId, productName, price, image) {
+    console.log('Adding to cart:', productId, productName);
+    
+    // Disable button to prevent double-click
+    var btn = event.target;
+    if (btn.tagName !== 'BUTTON') btn = btn.closest('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+    
+    const formData = new FormData();
+    formData.append('id', productId);
+    formData.append('name', productName);
+    formData.append('price', price);
+    formData.append('image', image);
+    formData.append('add_to_cart', 'true');
+    formData.append('ajax', 'true');
+
+    fetch('index.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => {
+        console.log('Response status:', res.status);
+        return res.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        if (data.success) {
+            // Update navbar badge quantity from server-provided cart_qty
+            try {
+                var qty = parseInt(data.cart_qty) || 0;
+                var cartLink = document.getElementById('cartIconLink');
+                if (cartLink) {
+                    var badge = cartLink.querySelector('.badge');
+                    if (!badge && qty > 0) {
+                        badge = document.createElement('span');
+                        badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
+                        badge.style.width = '18px';
+                        badge.style.height = '18px';
+                        badge.style.display = 'flex';
+                        badge.style.alignItems = 'center';
+                        badge.style.justifyContent = 'center';
+                        badge.style.fontSize = '0.6rem';
+                        badge.style.borderRadius = '50%';
+                        cartLink.appendChild(badge);
+                    }
+                    if (badge) {
+                        badge.textContent = qty > 0 ? qty : '';
+                        badge.style.display = qty > 0 ? 'flex' : 'none';
+                    }
+                }
+            } catch(e) { console.warn(e); }
+        } else {
+            alert(data.message || 'Error adding to cart');
+        }
+    })
+    .catch(err => {
+        console.error('Error:', err);
+        alert('Error adding to cart: ' + err);
+    })
+    .finally(() => {
+        // Re-enable button
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+    });
+}
 </script>
 
 <!-- Include Login/Register Modals -->
 <?php include 'login_register_modals.php'; ?>
+<?php include 'cart_offcanvas.php'; ?>
 
 <!-- Footer -->
 <footer class="bg-light text-center py-3">

@@ -365,11 +365,23 @@
     })
     .then(response => response.json())
     .then(data => {
+      console.log('[modal login] process_login response:', data);
       if (data.success) {
-        showLoginMessage('✓ Login successful! Redirecting...', 'success');
+        showLoginMessage('✓ Login successful! Preparing verification...', 'success');
         setTimeout(() => {
-          window.location.href = data.redirect || 'verify_login_otp.php';
-        }, 1500);
+          // Open the verify-login modal instead of redirecting to the verify page
+          const verifyModal = new bootstrap.Modal(document.getElementById('verifyLoginModal'));
+          // Populate email display inside modal if available
+          const emailEl = document.querySelector('#verifyLoginModal .otp-email');
+          if (emailEl) emailEl.textContent = document.getElementById('loginEmail').value.trim();
+          verifyModal.show();
+          // If server returned debug OTP, display it inside the modal
+          if (data.debug_otp) {
+            const debugHtml = `<div class="alert alert-warning alert-in-modal"><strong>DEBUG MODE ENABLED</strong><br>Your OTP Code: <span style="font-family: monospace; background:#fff3cd; padding:2px 6px; border-radius:3px;">${data.debug_otp}</span></div>`;
+            const msgDiv = document.getElementById('verifyLoginMessage');
+            if (msgDiv) msgDiv.innerHTML = debugHtml;
+          }
+        }, 700);
       } else {
         showLoginMessage(data.message || 'Login failed', 'danger');
         submitBtn.disabled = false;
@@ -488,11 +500,21 @@
     })
     .then(response => response.json())
     .then(data => {
+      console.log('[modal register] process_register response:', data);
       if (data.success) {
-        showRegisterMessage('✓ Account created! Redirecting...', 'success');
+        showRegisterMessage('✓ Account created! Preparing verification...', 'success');
         setTimeout(() => {
-          window.location.href = data.redirect || 'verify_registration_otp.php';
-        }, 1500);
+          // Open the verify-registration modal instead of redirecting
+          const verifyModal = new bootstrap.Modal(document.getElementById('verifyRegistrationModal'));
+          const emailEl = document.querySelector('#verifyRegistrationModal .otp-email');
+          if (emailEl) emailEl.textContent = document.getElementById('registerEmail').value.trim();
+          verifyModal.show();
+          if (data.debug_otp) {
+            const debugHtml = `<div class="alert alert-warning alert-in-modal"><strong>DEBUG MODE ENABLED</strong><br>Your OTP Code: <span style="font-family: monospace; background:#fff3cd; padding:2px 6px; border-radius:3px;">${data.debug_otp}</span></div>`;
+            const msgDiv = document.getElementById('verifyRegisterMessage');
+            if (msgDiv) msgDiv.innerHTML = debugHtml;
+          }
+        }, 700);
       } else {
         showRegisterMessage(data.message || 'Registration failed', 'danger');
         submitBtn.disabled = false;
@@ -615,6 +637,157 @@
     const submitBtn = document.querySelector('#forgotPasswordForm button[type="submit"]');
     submitBtn.disabled = false;
     submitBtn.innerHTML = '<i class="bi bi-envelope-check me-2"></i> Send Recovery Link';
+  });
+</script>
+
+<!-- Verify Login OTP Modal -->
+<div class="modal fade" id="verifyLoginModal" tabindex="-1" aria-labelledby="verifyLoginModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;">
+      <div class="modal-body p-4">
+        <button type="button" class="btn-close position-absolute top-3 end-3" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="text-center mb-3">
+          <h5 style="font-weight:800;">Verify Your Login</h5>
+          <p class="mb-0 text-muted otp-email" style="word-break:break-all;"></p>
+        </div>
+
+        <div id="verifyLoginMessage"></div>
+
+        <form id="verifyLoginForm">
+          <div class="mb-3">
+            <label class="form-label">Enter Verification Code</label>
+            <input type="text" name="otp" class="form-control text-center" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" required autofocus>
+            <small class="d-block mt-2 text-muted">Enter the 6-digit code sent to your email</small>
+          </div>
+          <button type="submit" class="btn w-100" style="background: linear-gradient(135deg, #c9a646 0%, #b8944f 100%); color: #fff; font-weight:700;">Verify & Login</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Verify Registration OTP Modal -->
+<div class="modal fade" id="verifyRegistrationModal" tabindex="-1" aria-labelledby="verifyRegistrationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;">
+      <div class="modal-body p-4">
+        <button type="button" class="btn-close position-absolute top-3 end-3" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="text-center mb-3">
+          <h5 style="font-weight:800;">Verify Your Email</h5>
+          <p class="mb-0 text-muted otp-email" style="word-break:break-all;"></p>
+        </div>
+
+        <div id="verifyRegisterMessage"></div>
+
+        <form id="verifyRegisterForm">
+          <div class="mb-3">
+            <label class="form-label">Enter Verification Code</label>
+            <input type="text" name="otp" class="form-control text-center" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" required autofocus>
+            <small class="d-block mt-2 text-muted">Enter the 6-digit code sent to your email</small>
+          </div>
+          <button type="submit" class="btn w-100" style="background: linear-gradient(135deg, #e75480 0%, #d9457a 100%); color: #fff; font-weight:700;">Verify Email</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Verify Login form via AJAX
+  document.getElementById('verifyLoginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const form = this;
+    const otp = form.querySelector('input[name="otp"]').value.trim();
+    const msgDiv = document.getElementById('verifyLoginMessage');
+    msgDiv.innerHTML = '';
+
+    if (!otp || otp.length !== 6) {
+      msgDiv.innerHTML = '<div class="alert alert-danger alert-in-modal">Please enter a valid 6-digit code.</div>';
+      return;
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Verifying...';
+
+    fetch('verify_login_otp.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+      body: 'otp=' + encodeURIComponent(otp)
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        msgDiv.innerHTML = '<div class="alert alert-success alert-in-modal">' + (data.message || 'Verified! Redirecting...') + '</div>';
+        setTimeout(() => { window.location.href = data.redirect || 'index.php'; }, 800);
+      } else {
+        msgDiv.innerHTML = '<div class="alert alert-danger alert-in-modal">' + (data.message || 'Verification failed') + '</div>';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Verify & Login';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      msgDiv.innerHTML = '<div class="alert alert-danger alert-in-modal">An error occurred. Please try again.</div>';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Verify & Login';
+    });
+  });
+
+  // Verify Registration form via AJAX
+  document.getElementById('verifyRegisterForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const form = this;
+    const otp = form.querySelector('input[name="otp"]').value.trim();
+    const msgDiv = document.getElementById('verifyRegisterMessage');
+    msgDiv.innerHTML = '';
+
+    if (!otp || otp.length !== 6) {
+      msgDiv.innerHTML = '<div class="alert alert-danger alert-in-modal">Please enter a valid 6-digit code.</div>';
+      return;
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Verifying...';
+
+    fetch('verify_registration_otp.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+      body: 'otp=' + encodeURIComponent(otp)
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        msgDiv.innerHTML = '<div class="alert alert-success alert-in-modal">' + (data.message || 'Verified! Redirecting...') + '</div>';
+        setTimeout(() => { window.location.href = data.redirect || 'index.php'; }, 800);
+      } else {
+        msgDiv.innerHTML = '<div class="alert alert-danger alert-in-modal">' + (data.message || 'Verification failed') + '</div>';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Verify Email';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      msgDiv.innerHTML = '<div class="alert alert-danger alert-in-modal">An error occurred. Please try again.</div>';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Verify Email';
+    });
+  });
+
+  // Clear OTP modals when hidden
+  document.getElementById('verifyLoginModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('verifyLoginMessage').innerHTML = '';
+    document.getElementById('verifyLoginForm').reset();
+    const submitBtn = document.querySelector('#verifyLoginForm button[type="submit"]');
+    submitBtn.disabled = false; submitBtn.textContent = 'Verify & Login';
+  });
+
+  document.getElementById('verifyRegistrationModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('verifyRegisterMessage').innerHTML = '';
+    document.getElementById('verifyRegisterForm').reset();
+    const submitBtn = document.querySelector('#verifyRegisterForm button[type="submit"]');
+    submitBtn.disabled = false; submitBtn.textContent = 'Verify Email';
   });
 </script>
 

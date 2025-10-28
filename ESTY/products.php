@@ -343,6 +343,11 @@ document.getElementById('newsletterForm').addEventListener('submit', function(e)
 function addToCartAjax(productId, productName, price, image) {
     console.log('Adding to cart:', productId, productName);
     
+    // Disable button to prevent double-click
+    var btn = event.target;
+    if (btn.tagName !== 'BUTTON') btn = btn.closest('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+    
     const formData = new FormData();
     formData.append('id', productId);
     formData.append('name', productName);
@@ -362,8 +367,29 @@ function addToCartAjax(productId, productName, price, image) {
     .then(data => {
         console.log('Response data:', data);
         if (data.success) {
-            // Reload to show notification
-            location.reload();
+            try {
+                var qty = parseInt(data.cart_qty) || 0;
+                var cartLink = document.getElementById('cartIconLink');
+                if (cartLink) {
+                    var badge = cartLink.querySelector('.badge');
+                    if (!badge && qty > 0) {
+                        badge = document.createElement('span');
+                        badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
+                        badge.style.width = '18px';
+                        badge.style.height = '18px';
+                        badge.style.display = 'flex';
+                        badge.style.alignItems = 'center';
+                        badge.style.justifyContent = 'center';
+                        badge.style.fontSize = '0.6rem';
+                        badge.style.borderRadius = '50%';
+                        cartLink.appendChild(badge);
+                    }
+                    if (badge) {
+                        badge.textContent = qty > 0 ? qty : '';
+                        badge.style.display = qty > 0 ? 'flex' : 'none';
+                    }
+                }
+            } catch(e) { console.warn(e); }
         } else {
             alert(data.message || 'Error adding to cart');
         }
@@ -371,6 +397,10 @@ function addToCartAjax(productId, productName, price, image) {
     .catch(err => {
         console.error('Error:', err);
         alert('Error adding to cart: ' + err);
+    })
+    .finally(() => {
+        // Re-enable button
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     });
 }
 </script>

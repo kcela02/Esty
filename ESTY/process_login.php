@@ -53,11 +53,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $_SESSION['login_email'] = $email;
                     $_SESSION['login_username'] = $username;
                     
-                    echo json_encode([
-                        'success' => true, 
+                    // For AJAX/modal flow we don't force a client redirect to the standalone verify page.
+                    $response = [
+                        'success' => true,
                         'message' => 'Verification code sent to your email',
-                        'redirect' => 'verify_login_otp.php'
-                    ]);
+                        // keep redirect empty so client-side modal flow controls navigation
+                        'redirect' => ''
+                    ];
+
+                    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                        $response['debug_otp'] = getDebugOtp($email);
+                    }
+
+                    echo json_encode($response);
                 } else {
                     echo json_encode(['success' => false, 'message' => 'Error sending verification code. Please try again.']);
                 }

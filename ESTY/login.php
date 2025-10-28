@@ -389,5 +389,74 @@ document.getElementById('loginForm').addEventListener('submit', function(e) {
 });
 </script>
 
+  <?php // Include the modal markup so the verify modal can be used on this page ?>
+  <?php include_once __DIR__ . '/login_register_modals.php'; ?>
+
+  <script>
+  // Intercept full-page login form and use AJAX to preserve modal OTP flow
+  document.getElementById('loginForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    if (!email || !password) {
+      // Let existing validation handle this
+      this.querySelector('.submit-btn')?.classList.remove('disabled');
+      return;
+    }
+
+    const submitBtn = this.querySelector('.submit-btn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Signing in...';
+
+    fetch('process_login.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: 'email=' + encodeURIComponent(email) + '&password=' + encodeURIComponent(password)
+    })
+    .then(r => r.json())
+    .then(data => {
+      console.log('[page login] process_login response:', data);
+      if (data.success) {
+        // Open verify modal
+        const verifyModal = new bootstrap.Modal(document.getElementById('verifyLoginModal'));
+        const emailEl = document.querySelector('#verifyLoginModal .otp-email');
+        if (emailEl) emailEl.textContent = email;
+        verifyModal.show();
+        if (data.debug_otp) {
+          const debugHtml = `<div class="alert alert-warning alert-in-modal"><strong>DEBUG MODE ENABLED</strong><br>Your OTP Code: <span style="font-family: monospace; background:#fff3cd; padding:2px 6px; border-radius:3px;">${data.debug_otp}</span></div>`;
+          const msgDiv = document.getElementById('verifyLoginMessage');
+          if (msgDiv) msgDiv.innerHTML = debugHtml;
+        }
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Login';
+      } else {
+        // Show error using existing alert area
+        document.querySelector('.alert-error')?.remove();
+        const error = document.createElement('div');
+        error.className = 'alert-error';
+        error.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> <span>' + (data.message || 'Login failed') + '</span>';
+        document.querySelector('.auth-body').insertBefore(error, document.querySelector('form'));
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Login';
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      document.querySelector('.alert-error')?.remove();
+      const error = document.createElement('div');
+      error.className = 'alert-error';
+      error.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> <span>An error occurred. Please try again.</span>';
+      document.querySelector('.auth-body').insertBefore(error, document.querySelector('form'));
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Login';
+    });
+  });
+  </script>
+
 </body>
 </html>
+
