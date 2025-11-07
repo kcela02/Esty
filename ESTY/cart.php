@@ -180,66 +180,137 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
   <?php endif; ?>
   
   <?php if (!empty($_SESSION['cart'])): ?>
-    <table class="table table-bordered text-center align-middle">
-      <thead class="table-dark">
-        <tr>
-          <th>Product</th>
-          <th>Price</th>
-          <th>Quantity</th>
-          <th>Total</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php $grandTotal = 0; ?>
-        <?php foreach ($_SESSION['cart'] as $item): ?>
-          <?php $total = $item['price'] * $item['quantity']; ?>
-          <?php $grandTotal += $total; ?>
-          <tr>
-            <td><?= htmlspecialchars($item['name']); ?></td>
-            <td>₱<?= number_format($item['price'], 2); ?></td>
-
-            <!-- Quantity with + / - icon buttons -->
-            <td>
-              <div class="d-flex justify-content-center align-items-center gap-1">
-                <!-- Decrease Button -->
-                <a href="cart.php?update=decrease&id=<?= $item['id']; ?>"
-                   class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center p-1"
-                   style="width:28px; height:28px;">
-                  <i class="bi bi-dash"></i>
-                </a>
-
-                <!-- Quantity Number -->
-                <span class="mx-2"><?= $item['quantity']; ?></span>
-
-                <!-- Increase Button -->
-                <a href="cart.php?update=increase&id=<?= $item['id']; ?>"
-                   class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center p-1"
-                   style="width:28px; height:28px;">
-                  <i class="bi bi-plus"></i>
-                </a>
+    <div class="row">
+      <!-- Cart Items Section -->
+      <div class="col-md-8">
+        <h3 class="mb-4 fw-bold">
+          <i class="bi bi-bag-check me-2"></i>Your Cart (<?= count($_SESSION['cart']); ?> items)
+        </h3>
+        
+        <div class="cart-items">
+          <?php $grandTotal = 0; ?>
+          <?php foreach ($_SESSION['cart'] as $item): ?>
+            <?php $total = $item['price'] * $item['quantity']; ?>
+            <?php $grandTotal += $total; ?>
+            
+            <div class="card mb-3 shadow-sm border-0 cart-item">
+              <div class="card-body p-4">
+                <div class="row align-items-center">
+                  <!-- Product Image -->
+                  <div class="col-md-2 col-4 mb-3 mb-md-0 text-center">
+                    <img src="<?= htmlspecialchars($item['image'] ?? 'images/default.jpg'); ?>" 
+                         alt="<?= htmlspecialchars($item['name']); ?>"
+                         class="img-fluid rounded"
+                         style="max-width: 100%; height: auto; object-fit: cover; max-height: 120px;">
+                  </div>
+                  
+                  <!-- Product Info -->
+                  <div class="col-md-3 col-8 mb-3 mb-md-0">
+                    <h6 class="mb-2 fw-bold text-truncate"><?= htmlspecialchars($item['name']); ?></h6>
+                    <p class="text-muted small mb-0">
+                      <strong>₱<?= number_format($item['price'], 2); ?></strong> per item
+                    </p>
+                  </div>
+                  
+                  <!-- Quantity Controls -->
+                  <div class="col-md-2 col-6 mb-3 mb-md-0">
+                    <label class="small text-muted d-block mb-2">Quantity</label>
+                    <div class="d-flex justify-content-center align-items-center gap-2">
+                      <button type="button" onclick="updateCartQuantity(<?= $item['id']; ?>, 'decrease')"
+                         class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center cart-update-btn"
+                         style="width:32px; height:32px; padding:0;"
+                         data-product-id="<?= $item['id']; ?>"
+                         data-action="decrease">
+                        <i class="bi bi-dash"></i>
+                      </button>
+                      <span class="fw-bold qty-display" data-product-id="<?= $item['id']; ?>" style="min-width: 30px; text-align: center;"><?= $item['quantity']; ?></span>
+                      <button type="button" onclick="updateCartQuantity(<?= $item['id']; ?>, 'increase')"
+                         class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center cart-update-btn"
+                         style="width:32px; height:32px; padding:0;"
+                         data-product-id="<?= $item['id']; ?>"
+                         data-action="increase">
+                        <i class="bi bi-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <!-- Subtotal -->
+                  <div class="col-md-2 col-6 mb-3 mb-md-0 text-end text-md-center">
+                    <label class="small text-muted d-block mb-2">Subtotal</label>
+                    <h5 class="mb-0 fw-bold text-success">₱<?= number_format($total, 2); ?></h5>
+                  </div>
+                  
+                  <!-- Remove Button -->
+                  <div class="col-md-3 col-12 text-md-end">
+                    <button type="button" onclick="removeFromCart(<?= $item['id']; ?>)" 
+                       class="btn btn-sm btn-outline-danger w-100 w-md-auto cart-remove-btn"
+                       data-product-id="<?= $item['id']; ?>">
+                      <i class="bi bi-trash me-1"></i> Remove
+                    </button>
+                  </div>
+                </div>
               </div>
-            </td>
-
-            <td>₱<?= number_format($total, 2); ?></td>
-            <td><a href="cart.php?remove=<?= $item['id']; ?>" class="btn btn-danger btn-sm">Remove</a></td>
-          </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-
-    <div class="text-end mb-3">
-      <h4>Grand Total: ₱<?= number_format($grandTotal, 2); ?></h4>
-    </div>
-    <div class="d-flex justify-content-between align-items-center mt-4">
-      <a href="index.php" class="btn btn-primary">Continue Shopping</a>
-      <?php if (isset($_SESSION['user_id'])): ?>
-        <a href="checkout.php" class="btn btn-success checkout-btn">Proceed to Checkout</a>
-      <?php else: ?>
-        <button type="button" class="btn btn-success checkout-btn" data-bs-toggle="modal" data-bs-target="#loginModal">
-          <i class="bi bi-box-arrow-in-right me-2"></i> Login to Checkout
-        </button>
-      <?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        
+        <!-- Clear Cart Button -->
+        <div class="mt-3">
+          <a href="cart.php?clear=1" class="btn btn-outline-danger btn-sm" 
+             onclick="return confirm('Are you sure you want to clear your entire cart?');">
+            <i class="bi bi-trash-fill me-1"></i> Clear Cart
+          </a>
+        </div>
+      </div>
+      
+      <!-- Cart Summary Section -->
+      <div class="col-md-4">
+        <div class="card shadow-sm border-0 sticky-top" style="top: 20px;">
+          <div class="card-body">
+            <h5 class="card-title mb-4 fw-bold">
+              <i class="bi bi-receipt me-2"></i>Order Summary
+            </h5>
+            
+            <div class="mb-3 pb-3 border-bottom">
+              <div class="d-flex justify-content-between mb-2">
+                <span>Subtotal:</span>
+                <strong>₱<?= number_format($grandTotal, 2); ?></strong>
+              </div>
+              <div class="d-flex justify-content-between mb-2">
+                <span>Shipping:</span>
+                <span class="badge bg-info text-dark">Free</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Tax:</span>
+                <strong>₱0.00</strong>
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              <div class="d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">Total:</h6>
+                <h5 class="mb-0 text-success fw-bold">₱<?= number_format($grandTotal, 2); ?></h5>
+              </div>
+            </div>
+            
+            <!-- Checkout Button -->
+            <?php if (isset($_SESSION['user_id'])): ?>
+              <a href="checkout.php" class="btn btn-success w-100 btn-lg mb-2">
+                <i class="bi bi-credit-card me-2"></i> Proceed to Checkout
+              </a>
+            <?php else: ?>
+              <button type="button" class="btn btn-success w-100 btn-lg mb-2" data-bs-toggle="modal" data-bs-target="#loginModal">
+                <i class="bi bi-box-arrow-in-right me-2"></i> Login to Checkout
+              </button>
+            <?php endif; ?>
+            
+            <!-- Continue Shopping Button -->
+            <a href="index.php" class="btn btn-outline-secondary w-100">
+              <i class="bi bi-arrow-left me-1"></i> Continue Shopping
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
 
   <?php else: ?>
@@ -258,6 +329,84 @@ if (isset($_GET['update']) && isset($_GET['id'])) {
 <?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+// Update navbar badge with current cart quantity
+document.addEventListener('DOMContentLoaded', function() {
+  updateNavbarBadgeFromCart();
+});
+
+function updateNavbarBadgeFromCart() {
+  // Calculate cart COUNT (number of different items) from PHP session cart data
+  var cartData = <?= json_encode($_SESSION['cart'] ?? []); ?>;
+  var itemCount = Array.isArray(cartData) ? cartData.length : 0;
+
+  // Update navbar badge
+  var cartLink = document.getElementById('cartIconLink');
+  if (cartLink) {
+    var badge = cartLink.querySelector('.badge');
+    if (!badge && itemCount > 0) {
+      // Create badge if it doesn't exist
+      badge = document.createElement('span');
+      badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
+      badge.style.width = '18px';
+      badge.style.height = '18px';
+      badge.style.display = 'flex';
+      badge.style.alignItems = 'center';
+      badge.style.justifyContent = 'center';
+      badge.style.fontSize = '0.6rem';
+      badge.style.borderRadius = '50%';
+      cartLink.appendChild(badge);
+    }
+    if (badge) {
+      badge.textContent = itemCount > 0 ? itemCount : '';
+      badge.style.display = itemCount > 0 ? 'flex' : 'none';
+    }
+  }
+}
+
+// AJAX handler for quantity updates (increase/decrease)
+function updateCartQuantity(productId, action) {
+  var btn = event.target.closest('button');
+  if (btn) btn.disabled = true;
+  
+  fetch('cart.php?update=' + action + '&id=' + productId, {
+    method: 'GET'
+  })
+  .then(res => res.text())
+  .then(html => {
+    // Reload page to refresh cart display and update navbar badge
+    location.reload();
+  })
+  .catch(err => {
+    console.error('Error updating cart:', err);
+    if (btn) btn.disabled = false;
+    alert('Error updating cart');
+  });
+}
+
+// AJAX handler for removing items from cart
+function removeFromCart(productId) {
+  if (!confirm('Are you sure you want to remove this item?')) return;
+  
+  var btn = event.target.closest('button');
+  if (btn) btn.disabled = true;
+  
+  fetch('cart.php?remove=' + productId, {
+    method: 'GET'
+  })
+  .then(res => res.text())
+  .then(html => {
+    // Reload page to refresh cart display and update navbar badge
+    location.reload();
+  })
+  .catch(err => {
+    console.error('Error removing from cart:', err);
+    if (btn) btn.disabled = false;
+    alert('Error removing item');
+  });
+}
+</script>
 
 </body>
 </html>

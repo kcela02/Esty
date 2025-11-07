@@ -104,7 +104,7 @@ $stmt->close();
 
 <main style="flex: 1;">
 <section class="container my-5">
-    <h2 class="mb-4">📊 Compare Products</h2>
+    <h2 class="mb-4"> Compare Products</h2>
 
     <?php if (empty($products)): ?>
         <div class="alert alert-info text-center py-5">

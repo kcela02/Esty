@@ -1,4 +1,106 @@
 <?php
+session_start();
+require 'db.php';
+include 'navbar.php';
+
+$product_id = intval($_GET['id'] ?? 0);
+
+if ($product_id <= 0) {
+    header('Location: products.php');
+    exit;
+}
+
+// Fetch product with category, brand, and rating info
+$stmt = $conn->prepare("
+    SELECT 
+        p.id, p.name, p.description, p.price, p.image, p.stock,
+        c.name as category_name, b.name as brand_name,
+        COALESCE(pr.average_rating, 0) as average_rating,
+        COALESCE(pr.review_count, 0) as review_count
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN brands b ON p.brand_id = b.id
+    LEFT JOIN product_ratings pr ON p.id = pr.product_id
+    WHERE p.id = ?
+");
+$stmt->bind_param("i", $product_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows === 0) {
+    header('Location: products.php');
+    exit;
+}
+
+$product = $result->fetch_assoc();
+$stmt->close();
+
+// Fetch reviews
+$reviews = [];
+$stmt = $conn->prepare("
+    SELECT r.id, r.rating, r.title, r.comment, r.created_at, u.username
+    FROM product_reviews r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.product_id = ?
+    ORDER BY r.created_at DESC
+");
+$stmt->bind_param("i", $product_id);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $reviews[] = $row;
+}
+$stmt->close();
+
+// Check if user already reviewed
+$user_already_reviewed = false;
+$user_has_purchased = false;
+
+if (isset($_SESSION['user_id'])) {
+    $stmt = $conn->prepare("SELECT id FROM product_reviews WHERE product_id = ? AND user_id = ?");
+    $stmt->bind_param("ii", $product_id, $_SESSION['user_id']);
+    $stmt->execute();
+    $stmt->store_result();
+    $user_already_reviewed = $stmt->num_rows > 0;
+    $stmt->close();
+    
+    // For now, allow all logged-in users to review (no purchase check needed)
+    // To enable purchase verification, add user_id column to orders table
+    $user_has_purchased = true;
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= htmlspecialchars($product['name']); ?> - Esty Scents</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .product-image { max-height: 400px; object-fit: cover; border-radius: 10px; }
+        .stars { color: rgb(251, 191, 36); font-size: 1.1rem; }
+        .review-card { border-left: 4px solid rgb(201, 166, 70); padding: 15px; margin: 15px 0; background: rgb(249, 250, 251); border-radius: 5px; }
+        .rating-input { font-size: 2rem; cursor: pointer; }
+        .rating-input i { color: rgb(200, 200, 200); transition: 0.2s; }
+        .rating-input i.active { color: rgb(251, 191, 36); }
+    </style>
+</head>
+<body style="padding-top: 70px;">
+
+<!-- Success Notification -->
+<?php include 'success_notification.php'; ?>
+
+<main style="flex: 1;">
+<section class="container my-5">
+    <div class="row">
+        <!-- Product Image -->
+        <div class="col-md-5">
+            <img src="<?= htmlspecialchars($product['image']); ?>" alt="<?= htmlspecialchars($product['name']); ?>" class="product-image w-100">
+        </div>
+
+        <!-- Product Details -->
         <div class="col-md-7">
             <h2><?= htmlspecialchars($product['name']); ?></h2>
             
@@ -330,6 +432,80 @@ window.addEventListener('load', function() {
     });
 });
 
+function showSuccessNotification(data) {
+    // Safely convert numeric values
+    var cartTotal = parseFloat(data.cart_total) || 0;
+    var cartQty = parseInt(data.cart_qty) || 0;
+    var lastQty = parseInt(data.last_product_quantity) || 1;
+    
+    // Build and show success notification dynamically
+    var notifHtml = `
+    <div id="successNotification" class="position-fixed" style="top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; width: 90%; max-width: 500px;">
+        <div class="card" style="border: none; border-radius: 20px; box-shadow: 0 15px 50px rgba(0, 0, 0, 0.25);">
+            <button type="button" class="btn-close position-absolute" style="top: 15px; right: 15px; z-index: 10;" onclick="closeNotification()" aria-label="Close"></button>
+            <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 1) 0%, rgba(5, 150, 105, 1) 100%); padding: 20px; border-radius: 20px 20px 0 0; color: white; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 8px;">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+                <h5 style="margin: 0; font-weight: 700; font-size: 16px;">Product successfully added to your Shopping Cart</h5>
+            </div>
+            <div style="padding: 25px; border-bottom: 1px solid rgb(229, 231, 235);">
+                <div style="display: flex; gap: 15px; align-items: flex-start;">
+                    <div style="flex-shrink: 0;">
+                        <img src="${data.product_image || 'images/no-image.png'}" alt="${data.product_name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px; border: 1px solid rgb(229, 231, 235);">
+                    </div>
+                    <div style="flex: 1;">
+                        <h6 style="color: rgb(37, 99, 235); font-weight: 700; margin-bottom: 8px; font-size: 14px;">
+                            ${data.product_name}
+                        </h6>
+                        <p style="margin: 0; font-size: 14px; color: rgb(102, 102, 102);">
+                            Quantity: <strong>${lastQty}</strong>
+                        </p>
+                        <p style="margin: 5px 0 0 0; font-size: 14px; color: rgb(102, 102, 102);">
+                            Cart Total: <strong style="color: rgb(17, 17, 17);">₱${cartTotal.toFixed(2)}</strong>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div style="padding: 20px; background-color: rgb(249, 250, 251); border-radius: 0 0 20px 20px;">
+                <p style="margin: 0 0 15px 0; font-size: 14px; color: rgb(102, 102, 102);">
+                    There are <strong>${cartQty}</strong> item${cartQty !== 1 ? 's' : ''} in your cart.
+                </p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 12px 0; border-top: 1px solid rgb(229, 231, 235); border-bottom: 1px solid rgb(229, 231, 235);">
+                    <span style="font-weight: 700; color: rgb(17, 17, 17);">Cart Total:</span>
+                    <span style="font-weight: 700; font-size: 18px; color: rgb(5, 150, 105);">₱${cartTotal.toFixed(2)}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <button type="button" class="btn" onclick="closeNotification()" style="background-color: rgb(229, 231, 235); color: rgb(17, 17, 17); font-weight: 700; border: none; border-radius: 25px; padding: 12px 20px;">
+                        Continue Shopping
+                    </button>
+                    <a href="cart.php" class="btn" style="background-color: rgb(251, 191, 36); color: rgb(17, 17, 17); font-weight: 700; border: none; border-radius: 25px; padding: 12px 20px; text-decoration: none; display: inline-block; text-align: center;">
+                        Proceed to Checkout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+    
+    // Remove any existing notification
+    var existing = document.getElementById('successNotification');
+    if (existing) existing.remove();
+    
+    // Insert new notification
+    document.body.insertAdjacentHTML('beforeend', notifHtml);
+    
+    // Auto-close after 8 seconds
+    setTimeout(() => { closeNotification(); }, 8000);
+}
+
+function closeNotification() {
+    const notification = document.getElementById('successNotification');
+    if (notification) {
+        notification.style.display = 'none';
+    }
+}
+
 // Add to cart via AJAX
 function addToCartAjax(productId, productName, price, image) {
     console.log('Adding to cart:', productId, productName);
@@ -358,31 +534,37 @@ function addToCartAjax(productId, productName, price, image) {
     .then(data => {
         console.log('Response data:', data);
         if (data.success) {
-            // Update navbar badge quantity from server-provided cart_qty
+            // Update navbar badge with item count from server-provided cart_count
             try {
-                var qty = parseInt(data.cart_qty) || 0;
+                var count = parseInt(data.cart_count) || 0;
+                console.log('Updating badge to item count:', count);
                 var cartLink = document.getElementById('cartIconLink');
                 if (cartLink) {
                     var badge = cartLink.querySelector('.badge');
-                    if (!badge && qty > 0) {
+                    if (!badge) {
+                        // Create badge if it doesn't exist
                         badge = document.createElement('span');
                         badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
                         badge.style.width = '18px';
                         badge.style.height = '18px';
-                        badge.style.display = 'flex';
                         badge.style.alignItems = 'center';
                         badge.style.justifyContent = 'center';
                         badge.style.fontSize = '0.6rem';
                         badge.style.borderRadius = '50%';
+                        badge.style.display = 'flex';
                         cartLink.appendChild(badge);
                     }
-                    if (badge) {
-                        badge.textContent = qty > 0 ? qty : '';
-                        badge.style.display = qty > 0 ? 'flex' : 'none';
-                    }
+                    // Always update the badge text and visibility
+                    badge.textContent = count > 0 ? count : '';
+                    badge.style.display = count > 0 ? 'flex' : 'none';
+                    console.log('Badge updated to:', count);
+                } else {
+                    console.warn('cartIconLink not found!');
                 }
-            } catch(e) { console.warn(e); }
-            window.location.reload();
+            } catch(e) { console.error('Badge update error:', e); }
+            
+            // Show success notification
+            showSuccessNotification(data);
         } else {
             alert(data.message || 'Error adding to cart');
         }

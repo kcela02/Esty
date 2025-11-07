@@ -13,6 +13,14 @@ if (isset($_SESSION['user_id'])) {
   sync_session_cart_from_db($conn, $_SESSION['user_id']);
 }
 
+$autoShowLoginModal = isset($_SESSION['show_login_modal']) ? (bool)$_SESSION['show_login_modal'] : false;
+$loginModalMessage = $_SESSION['login_modal_message'] ?? '';
+$loginModalType = $_SESSION['login_modal_type'] ?? 'success';
+
+if ($autoShowLoginModal) {
+  unset($_SESSION['show_login_modal'], $_SESSION['login_modal_message'], $_SESSION['login_modal_type']);
+}
+
 // Handle AJAX add_to_cart requests before any HTML output
 if (isset($_POST['add_to_cart']) && isset($_POST['ajax']) && $_POST['ajax'] === 'true') {
     $product_id = intval($_POST['id']);
@@ -158,24 +166,24 @@ if (isset($_POST['add_to_cart']) && isset($_POST['ajax']) && $_POST['ajax'] === 
     // Calculate cart totals
     $cart_count = 0;
     $cart_total = 0;
-  $cart_qty = 0;
+    $cart_qty = 0;
     if (isset($_SESSION['user_id'])) {
         $user_id = $_SESSION['user_id'];
-    $result = $conn->query("SELECT SUM(p.price * c.quantity) as total, COUNT(c.id) as count, COALESCE(SUM(c.quantity),0) as qty FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = $user_id");
+        $result = $conn->query("SELECT SUM(p.price * c.quantity) as total, COUNT(c.id) as count, COALESCE(SUM(c.quantity),0) as qty FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = $user_id");
         if ($result) {
             $row = $result->fetch_assoc();
-            $cart_count = $row['count'] ?? 0;
-            $cart_total = $row['total'] ?? 0;
-      $cart_qty = $row['qty'] ?? 0;
+            $cart_count = (int)($row['count'] ?? 0);
+            $cart_total = (float)($row['total'] ?? 0);
+            $cart_qty = (int)($row['qty'] ?? 0);
         }
     } else if (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
-    $cart_count = count($_SESSION['cart']);
-    $cart_total = 0;
-    $cart_qty = 0;
-    foreach ($_SESSION['cart'] as $item) {
-      $cart_total += $item['price'] * $item['quantity'];
-      $cart_qty += (int)($item['quantity'] ?? 0);
-    }
+        $cart_count = count($_SESSION['cart']);
+        $cart_total = 0;
+        $cart_qty = 0;
+        foreach ($_SESSION['cart'] as $item) {
+            $cart_total += (float)($item['price'] ?? 0) * (int)($item['quantity'] ?? 0);
+            $cart_qty += (int)($item['quantity'] ?? 0);
+        }
     }
 
     // Return JSON response
@@ -184,13 +192,25 @@ if (isset($_POST['add_to_cart']) && isset($_POST['ajax']) && $_POST['ajax'] === 
         'success' => isset($_SESSION['flash_type']) && $_SESSION['flash_type'] === 'success',
         'message' => $_SESSION['flash'] ?? '',
         'product_name' => $_SESSION['last_product_name'] ?? '',
-    'cart_count' => $cart_count,
-    'cart_total' => $cart_total,
-    'cart_qty' => $cart_qty
+        'product_image' => $_SESSION['last_product_image'] ?? '',
+        'last_product_quantity' => (int)($_SESSION['last_product_quantity'] ?? 0),
+        'last_product_price' => (float)($_SESSION['last_product_price'] ?? 0),
+        'cart_count' => $cart_count,
+        'cart_total' => floatval($cart_total),
+        'cart_qty' => $cart_qty
     ]);
-  // record last added time for this product for debounce
-  if (!isset($_SESSION['recent_adds'])) $_SESSION['recent_adds'] = [];
-  $_SESSION['recent_adds'][$product_id] = time();
+    
+    // Clear flash message after sending response (so it doesn't show on next page)
+    unset($_SESSION['flash']);
+    unset($_SESSION['flash_type']);
+    unset($_SESSION['last_product_name']);
+    unset($_SESSION['last_product_image']);
+    unset($_SESSION['last_product_quantity']);
+    unset($_SESSION['last_product_price']);
+    
+    // record last added time for this product for debounce
+    if (!isset($_SESSION['recent_adds'])) $_SESSION['recent_adds'] = [];
+    $_SESSION['recent_adds'][$product_id] = time();
     exit;
 }
 
@@ -474,39 +494,80 @@ if ($result_all && $result_all->num_rows > 0) {
   </div>
 </section>
 
-<!-- Newsletter -->
-<section class="bg-dark text-white text-center p-5">
-  <h2>Stay Updated</h2>
-  <p>Subscribe for the latest promos and offers!</p>
-  <form id="newsletterForm" class="d-flex justify-content-center">
-    <input type="email" name="email" placeholder="Enter your email" class="form-control w-25 me-2" required>
-    <button type="submit" class="btn btn-warning">Subscribe</button>
-  </form>
-  <p id="newsletterMessage" class="mt-3"></p>
-</section>
-
 <script>
-document.getElementById('newsletterForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const email = this.email.value;
-    const messageEl = document.getElementById('newsletterMessage');
+function showSuccessNotification(data) {
+    // Safely convert numeric values
+    var cartTotal = parseFloat(data.cart_total) || 0;
+    var cartQty = parseInt(data.cart_qty) || 0;
+    var lastQty = parseInt(data.last_product_quantity) || 1;
+    
+    // Build and show success notification dynamically
+    var notifHtml = `
+    <div id="successNotification" class="position-fixed" style="top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; width: 90%; max-width: 500px;">
+        <div class="card" style="border: none; border-radius: 20px; box-shadow: 0 15px 50px rgba(0, 0, 0, 0.25);">
+            <button type="button" class="btn-close position-absolute" style="top: 15px; right: 15px; z-index: 10;" onclick="closeNotification()" aria-label="Close"></button>
+            <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 1) 0%, rgba(5, 150, 105, 1) 100%); padding: 20px; border-radius: 20px 20px 0 0; color: white; text-align: center;">
+                <div style="font-size: 24px; margin-bottom: 8px;">
+                    <i class="bi bi-check-circle-fill"></i>
+                </div>
+                <h5 style="margin: 0; font-weight: 700; font-size: 16px;">Product successfully added to your Shopping Cart</h5>
+            </div>
+            <div style="padding: 25px; border-bottom: 1px solid rgb(229, 231, 235);">
+                <div style="display: flex; gap: 15px; align-items: flex-start;">
+                    <div style="flex-shrink: 0;">
+                        <img src="${data.product_image || 'images/no-image.png'}" alt="${data.product_name}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 10px; border: 1px solid rgb(229, 231, 235);">
+                    </div>
+                    <div style="flex: 1;">
+                        <h6 style="color: rgb(37, 99, 235); font-weight: 700; margin-bottom: 8px; font-size: 14px;">
+                            ${data.product_name}
+                        </h6>
+                        <p style="margin: 0; font-size: 14px; color: rgb(102, 102, 102);">
+                            Quantity: <strong>${lastQty}</strong>
+                        </p>
+                        <p style="margin: 5px 0 0 0; font-size: 14px; color: rgb(102, 102, 102);">
+                            Cart Total: <strong style="color: rgb(17, 17, 17);">₱${cartTotal.toFixed(2)}</strong>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div style="padding: 20px; background-color: rgb(249, 250, 251); border-radius: 0 0 20px 20px;">
+                <p style="margin: 0 0 15px 0; font-size: 14px; color: rgb(102, 102, 102);">
+                    There are <strong>${cartQty}</strong> item${cartQty !== 1 ? 's' : ''} in your cart.
+                </p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 12px 0; border-top: 1px solid rgb(229, 231, 235); border-bottom: 1px solid rgb(229, 231, 235);">
+                    <span style="font-weight: 700; color: rgb(17, 17, 17);">Cart Total:</span>
+                    <span style="font-weight: 700; font-size: 18px; color: rgb(5, 150, 105);">₱${cartTotal.toFixed(2)}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <button type="button" class="btn" onclick="closeNotification()" style="background-color: rgb(229, 231, 235); color: rgb(17, 17, 17); font-weight: 700; border: none; border-radius: 25px; padding: 12px 20px;">
+                        Continue Shopping
+                    </button>
+                    <a href="cart.php" class="btn" style="background-color: rgb(251, 191, 36); color: rgb(17, 17, 17); font-weight: 700; border: none; border-radius: 25px; padding: 12px 20px; text-decoration: none; display: inline-block; text-align: center;">
+                        Proceed to Checkout
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+    
+    // Remove any existing notification
+    var existing = document.getElementById('successNotification');
+    if (existing) existing.remove();
+    
+    // Insert new notification
+    document.body.insertAdjacentHTML('beforeend', notifHtml);
+    
+    // Auto-close after 8 seconds
+    setTimeout(() => { closeNotification(); }, 8000);
+}
 
-    fetch('subscribe.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'email=' + encodeURIComponent(email)
-    })
-    .then(response => response.json())
-    .then(data => {
-        messageEl.textContent = data.message;
-        messageEl.className = data.status === 'success' ? 'text-success mt-3' : 'text-danger mt-3';
-        if (data.status === 'success') this.reset();
-    })
-    .catch(err => {
-        messageEl.textContent = 'Something went wrong. Please try again.';
-        messageEl.className = 'text-danger mt-3';
-    });
-});
+function closeNotification() {
+    const notification = document.getElementById('successNotification');
+    if (notification) {
+        notification.style.display = 'none';
+    }
+}
 
 function addToCartAjax(productId, productName, price, image) {
     console.log('Adding to cart:', productId, productName);
@@ -535,30 +596,37 @@ function addToCartAjax(productId, productName, price, image) {
     .then(data => {
         console.log('Response data:', data);
         if (data.success) {
-            // Update navbar badge quantity from server-provided cart_qty
+            // Update navbar badge with cart COUNT (number of different items), not total quantity
             try {
-                var qty = parseInt(data.cart_qty) || 0;
+                var count = parseInt(data.cart_count) || 0;
+                console.log('Updating badge to item count:', count);
                 var cartLink = document.getElementById('cartIconLink');
                 if (cartLink) {
                     var badge = cartLink.querySelector('.badge');
-                    if (!badge && qty > 0) {
+                    if (!badge) {
+                        // Create badge if it doesn't exist
                         badge = document.createElement('span');
                         badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
                         badge.style.width = '18px';
                         badge.style.height = '18px';
-                        badge.style.display = 'flex';
                         badge.style.alignItems = 'center';
                         badge.style.justifyContent = 'center';
                         badge.style.fontSize = '0.6rem';
                         badge.style.borderRadius = '50%';
+                        badge.style.display = 'flex';
                         cartLink.appendChild(badge);
                     }
-                    if (badge) {
-                        badge.textContent = qty > 0 ? qty : '';
-                        badge.style.display = qty > 0 ? 'flex' : 'none';
-                    }
+                    // Always update the badge text and visibility
+                    badge.textContent = count > 0 ? count : '';
+                    badge.style.display = count > 0 ? 'flex' : 'none';
+                    console.log('Badge updated to:', count);
+                } else {
+                    console.warn('cartIconLink not found!');
                 }
-            } catch(e) { console.warn(e); }
+            } catch(e) { console.error('Badge update error:', e); }
+            
+            // Show success notification
+            showSuccessNotification(data);
         } else {
             alert(data.message || 'Error adding to cart');
         }
@@ -579,9 +647,79 @@ function addToCartAjax(productId, productName, price, image) {
 <?php include 'cart_offcanvas.php'; ?>
 
 <!-- Footer -->
-<footer class="bg-light text-center py-3">
-  <p>&copy; <?= date("Y"); ?> Esty Scents. All Rights Reserved.</p>
+<footer class="site-footer mt-5">
+  <div class="container footer-top">
+    <div class="row g-4">
+      <div class="col-12 col-md-3">
+        <h5 class="footer-heading">Esty Scents</h5>
+        <p class="footer-text">Curating luxurious fragrances inspired by timeless elegance. Discover signature scents crafted to leave a lasting impression.</p>
+        <p class="footer-text small">Customer Care: <a href="tel:+639123456789" class="footer-link">+63 912 345 6789</a></p>
+      </div>
+      <div class="col-6 col-md-3">
+        <h5 class="footer-heading">Store Locator</h5>
+        <ul class="footer-list">
+          <li><a href="products.php" class="footer-link">Find a Boutique</a></li>
+          <li><a href="#" class="footer-link">Book an Appointment</a></li>
+          <li><a href="products.php" class="footer-link">New Arrivals</a></li>
+          <li><a href="products.php" class="footer-link">Gift Sets</a></li>
+        </ul>
+      </div>
+      <div class="col-6 col-md-3">
+        <h5 class="footer-heading">Client Service</h5>
+        <ul class="footer-list">
+          <li><a href="my_orders.php" class="footer-link">Orders &amp; Shipping</a></li>
+          <li><a href="return.php" class="footer-link">Returns &amp; Exchanges</a></li>
+          <li><a href="track.php" class="footer-link">Track Your Order</a></li>
+          <li><a href="#" class="footer-link">Help &amp; FAQs</a></li>
+        </ul>
+      </div>
+      <div class="col-12 col-md-3">
+        <h5 class="footer-heading">Connect With Us</h5>
+        <p class="footer-text small">Follow Esty Scents on social platforms for exclusive previews and scent rituals.</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+          <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+          <a href="#" aria-label="Pinterest"><i class="bi bi-pinterest"></i></a>
+          <a href="#" aria-label="YouTube"><i class="bi bi-youtube"></i></a>
+          <a href="#" aria-label="TikTok"><i class="bi bi-tiktok"></i></a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div class="container d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
+      <p class="mb-0 small">&copy; <?= date('Y'); ?> Esty Scents. All rights reserved.</p>
+      <div class="footer-bottom-links">
+  <a href="#" class="footer-link">Privacy Policy</a>
+        <span class="footer-divider">|</span>
+  <a href="#" class="footer-link">Terms &amp; Conditions</a>
+        <span class="footer-divider">|</span>
+  <a href="#" class="footer-link">Contact</a>
+      </div>
+    </div>
+  </div>
 </footer>
+
+<?php if ($autoShowLoginModal): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  try {
+    const modalElement = document.getElementById('loginModal');
+    if (!modalElement) return;
+    const loginModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    loginModal.show();
+    <?php if (!empty($loginModalMessage)): ?>
+    if (typeof showLoginMessage === 'function') {
+      showLoginMessage(<?php echo json_encode($loginModalMessage, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>,
+                       <?php echo json_encode($loginModalType, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>);
+    }
+    <?php endif; ?>
+  } catch (err) {
+    console.error('Failed to auto-open login modal:', err);
+  }
+});
+</script>
+<?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

@@ -15,6 +15,7 @@ if (isset($_SESSION['user_id'])) {
 
 $cart = $_SESSION['cart'] ?? [];
 $total = 0;
+error_log('cart_fragment.php: synced cart has ' . count($cart) . ' items, total qty = ' . array_sum(array_map(function($i){ return intval($i['quantity'] ?? 0); }, $cart)));
 ?>
 <div id="cartFragment">
   <?php if (empty($cart)): ?>

@@ -86,7 +86,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 'message' => 'Account created! Please verify your email',
                 'redirect' => ''
             ];
-            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            if (estyIsDebugMode()) {
                 $response['debug_otp'] = getDebugOtp($email);
             }
             echo json_encode($response);

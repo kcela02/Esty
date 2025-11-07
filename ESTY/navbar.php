@@ -10,7 +10,12 @@
       <!-- Right: Search + Icons -->
       <div class="d-flex align-items-center justify-content-end gap-3" style="flex:2;">
 
-        <!-- Search Bar -->
+        <!-- Search Bar (hidden on product pages) -->
+        <?php
+          $current_page = basename($_SERVER['PHP_SELF']);
+          $hide_search = in_array($current_page, ['products.php', 'product_details.php', 'search.php']);
+        ?>
+        <?php if (!$hide_search): ?>
         <form class="position-relative" action="search.php" method="get" style="width:250px;">
           <input type="text"
                  name="q"
@@ -22,6 +27,7 @@
             <i class="bi bi-search"></i>
           </button>
         </form>
+        <?php endif; ?>
 
         <!-- User Account Dropdown (icon only) -->
 <div class="dropdown">
@@ -50,20 +56,20 @@
             <a href="#" class="text-dark fs-5 position-relative" title="Shopping Cart" data-bs-toggle="offcanvas" data-bs-target="#cartOffcanvas" aria-controls="cartOffcanvas" id="cartIconLink">
               <i class="bi bi-cart"></i>
               <?php
-                // Compute authoritative cart quantity: sum of quantities from DB (logged-in) or session (guest)
-                $cart_qty = 0;
+                // Compute authoritative cart count: count of different items from DB (logged-in) or session (guest)
+                $cart_count = 0;
                 if (isset($_SESSION['user_id'])) {
-                    $res = $conn->query("SELECT COALESCE(SUM(quantity),0) as qty FROM carts WHERE user_id = " . intval($_SESSION['user_id']));
-                    if ($res) { $r = $res->fetch_assoc(); $cart_qty = $r['qty'] ?? 0; }
+                    $res = $conn->query("SELECT COUNT(id) as count FROM carts WHERE user_id = " . intval($_SESSION['user_id']));
+                    if ($res) { $r = $res->fetch_assoc(); $cart_count = $r['count'] ?? 0; }
                 } else if (!empty($_SESSION['cart'])) {
-                    foreach ($_SESSION['cart'] as $item) { $cart_qty += (int)($item['quantity'] ?? 0); }
+                    $cart_count = count($_SESSION['cart']);
                 }
-                if ($cart_qty > 0):
+                if ($cart_count > 0):
               ?>
                 <span class="badge bg-danger position-absolute top-0 start-100 translate-middle"
                       style="width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%;
                              font-size: 0.6rem;">
-                  <?= $cart_qty; ?>
+                  <?= $cart_count; ?>
                 </span>
               <?php endif; ?>
             </a>

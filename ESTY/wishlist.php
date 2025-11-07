@@ -54,7 +54,7 @@ $stmt->close();
 <body style="padding-top: 70px;">
 
 <section class="container my-5">
-    <h2 class="mb-4">❤️ My Wishlist</h2>
+    <h2 class="mb-4"> My Wishlist</h2>
 
     <?php if (empty($wishlist)): ?>
         <div class="alert alert-info text-center py-5">

@@ -14,9 +14,26 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Filter cart items based on 'items' query parameter (selected items from offcanvas)
+$checkoutItems = $_SESSION['cart'];
+if (!empty($_GET['items'])) {
+    $selectedIds = array_filter(array_map('intval', explode(',', $_GET['items'])));
+    $checkoutItems = array_filter($checkoutItems, function($item) use ($selectedIds) {
+        return in_array(intval($item['id']), $selectedIds);
+    });
+    
+    // If no valid items matched, use full cart
+    if (empty($checkoutItems)) {
+        $checkoutItems = $_SESSION['cart'];
+    }
+}
+
+// Store selected items in session so process_order.php can use them
+$_SESSION['checkout_items'] = $checkoutItems;
+
 // Calculate grand total
 $grandTotal = 0;
-foreach ($_SESSION['cart'] as $item) {
+foreach ($checkoutItems as $item) {
     $grandTotal += $item['price'] * $item['quantity'];
 }
 ?>
@@ -48,7 +65,7 @@ foreach ($_SESSION['cart'] as $item) {
       <div class="card-body">
         <h4 class="mb-3">Order Summary</h4>
         <ul class="list-group">
-          <?php foreach ($_SESSION['cart'] as $item): ?>
+          <?php foreach ($checkoutItems as $item): ?>
             <li class="list-group-item d-flex justify-content-between align-items-center">
               <?= htmlspecialchars($item['name']); ?> (x<?= $item['quantity']; ?>)
               <span>₱<?= $item['price'] * $item['quantity']; ?></span>

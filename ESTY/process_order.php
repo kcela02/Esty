@@ -21,6 +21,9 @@ if (!isset($_SESSION['cart']) || count($_SESSION['cart']) == 0) {
     exit();
 }
 
+// Use selected checkout items if available, otherwise use full cart
+$itemsToProcess = $_SESSION['checkout_items'] ?? $_SESSION['cart'];
+
 $orderId = null;
 $pendingId = null;
 
@@ -53,17 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   }
   // fallback: if email still null, leave as null (no customer notification)
 
-    // Calculate total
+    // Calculate total from selected items
     $grandTotal = 0;
-    foreach ($_SESSION['cart'] as $item) {
+    foreach ($itemsToProcess as $item) {
         $grandTotal += $item['price'] * $item['quantity'];
     }
 
   // Validate stock and place order in a transaction
   $conn->begin_transaction();
   try {
-    // Check stock for each item
-    foreach ($_SESSION['cart'] as $item) {
+    // Check stock for each selected item
+    foreach ($itemsToProcess as $item) {
       $pid = (int)$item['id'];
       $qty = (int)$item['quantity'];
       $stock = null;
@@ -86,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $userIdForOrder = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
   if ($payment === 'gcash') {
     // create a pending order record and store the cart JSON until payment is confirmed
-    $cart_json = json_encode($_SESSION['cart']);
+    $cart_json = json_encode($itemsToProcess);
   // Save pending order using account email (may be null)
   if ($userIdForOrder !== null) {
     $pstmt = $conn->prepare("INSERT INTO pending_orders (customer_name, email, address, payment_method, total, cart_json, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
@@ -117,8 +120,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute();
     $orderId = $stmt->insert_id; // get last inserted order ID
 
-    // Insert items and decrement stock
-    foreach ($_SESSION['cart'] as $item) {
+    // Insert items and decrement stock (only for selected items)
+    foreach ($itemsToProcess as $item) {
       $subtotal = $item['price'] * $item['quantity'];
       $stmtItem = $conn->prepare("INSERT INTO order_items (order_id, product_name, price, quantity, subtotal) VALUES (?, ?, ?, ?, ?)");
       $stmtItem->bind_param("isddi", $orderId, $item['name'], $item['price'], $item['quantity'], $subtotal);
@@ -169,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $orderDetails .= "Delivery Address: $address\n\n";
     $orderDetails .= "Items:\n";
 
-    foreach ($_SESSION['cart'] as $item) {
+    foreach ($itemsToProcess as $item) {
         $orderDetails .= $item['name'] . " - " . $item['quantity'] . " x ₱" . number_format($item['price'], 2) . " = ₱" . number_format($item['price'] * $item['quantity'], 2) . "\n";
     }
 
@@ -190,17 +193,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Send email copy to shop owner
     @mail("youremail@example.com", $subjectAdmin, $orderDetails, $headers);
 
-  // Clear cart for non-GCash payments (immediate confirmation)
+  // Clear checkout items from cart for non-GCash payments (immediate confirmation)
   if ($payment !== 'gcash') {
-    // Also remove DB cart rows for logged-in users
-    if (isset($_SESSION['user_id'])) {
+    // Extract product IDs from items we just processed
+    $processedIds = array_map(function($item) { return intval($item['id']); }, $itemsToProcess);
+    
+    // Remove from DB for logged-in users (only the processed items)
+    if (isset($_SESSION['user_id']) && !empty($processedIds)) {
         $uid = $_SESSION['user_id'];
-        $dstmt = $conn->prepare("DELETE FROM carts WHERE user_id = ?");
+        $placeholders = implode(',', $processedIds);
+        $dstmt = $conn->prepare("DELETE FROM carts WHERE user_id = ? AND product_id IN ($placeholders)");
         $dstmt->bind_param('i', $uid);
         $dstmt->execute();
         $dstmt->close();
     }
-    unset($_SESSION['cart']);
+    
+    // Remove from session cart (only the processed items)
+    if (!empty($_SESSION['cart'])) {
+        $_SESSION['cart'] = array_filter($_SESSION['cart'], function($item) use ($processedIds) {
+            return !in_array(intval($item['id']), $processedIds);
+        });
+    }
+    
+    // Clear checkout_items session variable
+    unset($_SESSION['checkout_items']);
   }
 }
 ?>
@@ -220,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="container my-5">
   <div class="empty-cart text-center p-5">
-    <h2 class="mb-3">🎉 Order Confirmed!</h2>
+    <h2 class="mb-3"> Order Confirmed!</h2>
     <p>Thank you <strong><?php echo htmlspecialchars($name); ?></strong> for your order.</p>
   <?php if (!empty($email)): ?>
     <p>A copy of your order has been sent to <strong><?php echo htmlspecialchars($email); ?></strong>.</p>

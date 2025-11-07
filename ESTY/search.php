@@ -279,29 +279,95 @@ if (isset($_POST['add_to_cart']) && (!isset($_POST['ajax']) || $_POST['ajax'] !=
   exit;
 }
 
-// Get search query
+// Get search query and filters
 $query = isset($_GET['q']) ? trim($_GET['q']) : '';
+$category_filter = isset($_GET['category']) ? intval($_GET['category']) : 0;
+$brand_filter = isset($_GET['brand']) ? intval($_GET['brand']) : 0;
+$price_min = isset($_GET['price_min']) ? floatval($_GET['price_min']) : 0;
+$price_max = isset($_GET['price_max']) ? floatval($_GET['price_max']) : PHP_INT_MAX;
+$rating_filter = isset($_GET['rating']) ? intval($_GET['rating']) : 0;
+
 $products = [];
+
+// Get all categories for filter
+$categories_result = $conn->query("SELECT id, name FROM categories ORDER BY name ASC");
+$categories = [];
+if ($categories_result) {
+  while ($row = $categories_result->fetch_assoc()) {
+    $categories[] = $row;
+  }
+}
+
+// Get all brands for filter
+$brands_result = $conn->query("SELECT id, name FROM brands ORDER BY name ASC");
+$brands = [];
+if ($brands_result) {
+  while ($row = $brands_result->fetch_assoc()) {
+    $brands[] = $row;
+  }
+}
 
 if ($query !== '') {
   $like = "%" . $query . "%";
-  $stmt = $conn->prepare("
+  $sql = "
     SELECT 
       p.id, p.name, p.description, p.price, p.image, p.stock,
-      c.name AS category_name, b.name AS brand_name,
+      c.name AS category_name, c.id AS category_id, 
+      b.name AS brand_name, b.id AS brand_id,
       COALESCE(pr.average_rating, 0) AS average_rating,
       COALESCE(pr.review_count, 0) AS review_count
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     LEFT JOIN brands b ON p.brand_id = b.id
     LEFT JOIN product_ratings pr ON p.id = pr.product_id
-    WHERE p.name LIKE ?
+    WHERE (p.name LIKE ?
        OR p.description LIKE ?
-       OR CAST(p.price AS CHAR) LIKE ?
-    ORDER BY p.name ASC
-  ");
+       OR CAST(p.price AS CHAR) LIKE ?)
+  ";
+  
+  $params = [];
+  $types = '';
+  
+  // Add search params
+  $params[] = &$like;
+  $params[] = &$like;
+  $params[] = &$like;
+  $types = 'sss';
+  
+  // Apply category filter
+  if ($category_filter > 0) {
+    $sql .= " AND p.category_id = ?";
+    $params[] = &$category_filter;
+    $types .= 'i';
+  }
+  
+  // Apply brand filter
+  if ($brand_filter > 0) {
+    $sql .= " AND p.brand_id = ?";
+    $params[] = &$brand_filter;
+    $types .= 'i';
+  }
+  
+  // Apply price filter
+  if ($price_max < PHP_INT_MAX) {
+    $sql .= " AND p.price BETWEEN ? AND ?";
+    $params[] = &$price_min;
+    $params[] = &$price_max;
+    $types .= 'dd';
+  }
+  
+  // Apply rating filter
+  if ($rating_filter > 0) {
+    $sql .= " AND COALESCE(pr.average_rating, 0) >= ?";
+    $params[] = &$rating_filter;
+    $types .= 'i';
+  }
+  
+  $sql .= " ORDER BY p.name ASC";
+  
+  $stmt = $conn->prepare($sql);
   if ($stmt) {
-    $stmt->bind_param("sss", $like, $like, $like);
+    call_user_func_array([$stmt, 'bind_param'], array_merge([$types], $params));
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -332,9 +398,78 @@ if ($query !== '') {
     <h2 class="mb-4">Search Results for: <span class="text-primary"><?= htmlspecialchars($query); ?></span></h2>
 
     <div class="row g-4">
+      <!-- Filters Sidebar -->
+      <div class="col-md-3">
+        <div class="card p-3">
+          <h5 class="mb-3">Filters</h5>
+          
+          <form method="GET" action="search.php">
+            <!-- Search Query (hidden) -->
+            <input type="hidden" name="q" value="<?= htmlspecialchars($query); ?>">
+            
+            <!-- Category Filter -->
+            <div class="mb-3">
+              <label class="form-label fw-bold">Category</label>
+              <select class="form-select form-select-sm" name="category" onchange="this.form.submit()">
+                <option value="0">All Categories</option>
+                <?php foreach ($categories as $cat): ?>
+                  <option value="<?= $cat['id']; ?>" <?= $category_filter == $cat['id'] ? 'selected' : ''; ?>>
+                    <?= htmlspecialchars($cat['name']); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            
+            <!-- Brand Filter -->
+            <div class="mb-3">
+              <label class="form-label fw-bold">Brand</label>
+              <select class="form-select form-select-sm" name="brand" onchange="this.form.submit()">
+                <option value="0">All Brands</option>
+                <?php foreach ($brands as $br): ?>
+                  <option value="<?= $br['id']; ?>" <?= $brand_filter == $br['id'] ? 'selected' : ''; ?>>
+                    <?= htmlspecialchars($br['name']); ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            
+            <!-- Price Range Filter -->
+            <div class="mb-3">
+              <label class="form-label fw-bold">Price Range</label>
+              <div class="input-group input-group-sm mb-2">
+                <span class="input-group-text">₱</span>
+                <input type="number" class="form-control" name="price_min" placeholder="Min" value="<?= $price_min > 0 ? $price_min : ''; ?>" min="0">
+              </div>
+              <div class="input-group input-group-sm">
+                <span class="input-group-text">₱</span>
+                <input type="number" class="form-control" name="price_max" placeholder="Max" value="<?= $price_max < PHP_INT_MAX ? $price_max : ''; ?>" min="0">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm w-100 mt-2">Apply Price</button>
+            </div>
+            
+            <!-- Rating Filter -->
+            <div class="mb-3">
+              <label class="form-label fw-bold">Min Rating</label>
+              <select class="form-select form-select-sm" name="rating" onchange="this.form.submit()">
+                <option value="0">All Ratings</option>
+                <option value="5" <?= $rating_filter == 5 ? 'selected' : ''; ?>>5 Stars</option>
+                <option value="4" <?= $rating_filter == 4 ? 'selected' : ''; ?>>4+ Stars</option>
+                <option value="3" <?= $rating_filter == 3 ? 'selected' : ''; ?>>3+ Stars</option>
+              </select>
+            </div>
+            
+            <!-- Clear Filters -->
+            <a href="search.php?q=<?= urlencode($query); ?>" class="btn btn-secondary btn-sm w-100">Clear Filters</a>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Products Grid -->
+      <div class="col-md-9">
+        <div class="row g-4">
       <?php if (!empty($products)): ?>
         <?php foreach ($products as $p): ?>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <div class="card product-card shadow h-100">
               <a href="product_details.php?id=<?= $p['id']; ?>" style="text-decoration: none; color: inherit;">
                 <img src="<?= htmlspecialchars($p['image']); ?>" class="card-img-top" alt="<?= htmlspecialchars($p['name']); ?>" style="height: 250px; object-fit: cover;">
@@ -395,9 +530,11 @@ if ($query !== '') {
             </div>
           </div>
         <?php endforeach; ?>
+        </div>
       <?php else: ?>
         <p class="text-muted">No products found matching your search.</p>
       <?php endif; ?>
+      </div>
     </div>
   </div>
 

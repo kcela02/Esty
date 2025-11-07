@@ -4,6 +4,11 @@ require 'db.php';
 require 'config_email.php';
 require_once __DIR__ . '/user_activity_helpers.php';
 
+// Enable error logging
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/logs/php_errors.log');
+
 $message = "";
 $message_type = "";
 $token = isset($_GET['token']) ? trim($_GET['token']) : null;
@@ -11,6 +16,13 @@ $show_password_form = false;
 $show_otp_form = false;
 $reset_user_id = null;
 $reset_email = null;
+
+// Log token for debugging
+if ($token) {
+    file_put_contents(__DIR__ . '/logs/otp_debug.log', date('Y-m-d H:i:s') . " | Reset token received: " . substr($token, 0, 10) . "...\n", FILE_APPEND);
+} else {
+    file_put_contents(__DIR__ . '/logs/otp_debug.log', date('Y-m-d H:i:s') . " | No token received\n", FILE_APPEND);
+}
 
 // Validate token
 if ($token) {
@@ -20,6 +32,7 @@ if ($token) {
     $result = $stmt->get_result();
     
     if ($result->num_rows == 1) {
+        file_put_contents(__DIR__ . '/logs/otp_debug.log', date('Y-m-d H:i:s') . " | Token validated successfully\n", FILE_APPEND);
         $reset_record = $result->fetch_assoc();
         $reset_user_id = $reset_record['id'];
         $reset_email = $reset_record['email'];
@@ -32,6 +45,7 @@ if ($token) {
             $show_otp_form = true;
         }
     } else {
+        file_put_contents(__DIR__ . '/logs/otp_debug.log', date('Y-m-d H:i:s') . " | Token validation failed: no matching record or expired\n", FILE_APPEND);
         $message = "Invalid or expired reset link. Please request a new password reset.";
         $message_type = "danger";
     }
@@ -137,18 +151,19 @@ if ($show_password_form && $_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST[
                 $delete_stmt = $conn->prepare("DELETE FROM password_resets WHERE reset_token = ?");
                 $delete_stmt->bind_param("s", $token);
                 $delete_stmt->execute();
+        $delete_stmt->close();
 
-        logUserActivity($conn, (int) $user_id, 'profile_updated', 'Password reset via secure link.');
-                
-                $message = "Password reset successful! Redirecting to login in 3 seconds...";
-                $message_type = "success";
-                $show_password_form = false;
-                
-                echo "<script>
-                setTimeout(function() {
-                    window.location.href = 'login.php';
-                }, 3000);
-                </script>";
+        logUserActivity($conn, (int)$user_id, 'profile_updated', 'Password reset via secure link.');
+
+        $update_user_stmt->close();
+        $get_user_stmt->close();
+
+        $_SESSION['show_login_modal'] = true;
+        $_SESSION['login_modal_message'] = 'Password reset successful! Please sign in with your new password.';
+        $_SESSION['login_modal_type'] = 'success';
+
+        header('Location: index.php');
+        exit;
             } else {
                 $message = "Error updating password. Please try again.";
                 $message_type = "danger";
@@ -161,16 +176,15 @@ if ($show_password_form && $_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST[
 
 // Get time remaining for OTP
 $time_remaining = "";
+$remaining_seconds = 0;
 if ($show_otp_form && $token) {
-    $stmt = $conn->prepare("SELECT expires_at FROM password_resets WHERE reset_token = ?");
+  $stmt = $conn->prepare("SELECT GREATEST(TIMESTAMPDIFF(SECOND, NOW(), expires_at), 0) AS seconds_left FROM password_resets WHERE reset_token = ?");
     $stmt->bind_param("s", $token);
     $stmt->execute();
     $result = $stmt->get_result();
     if ($result->num_rows == 1) {
         $row = $result->fetch_assoc();
-        $expires_at = strtotime($row['expires_at']);
-        $now = time();
-        $remaining_seconds = $expires_at - $now;
+    $remaining_seconds = (int)($row['seconds_left'] ?? 0);
         if ($remaining_seconds > 0) {
             $minutes = floor($remaining_seconds / 60);
             $seconds = $remaining_seconds % 60;
@@ -375,7 +389,7 @@ if ($show_otp_form && $token) {
 
       <!-- OTP Verification Form -->
       <?php if ($show_otp_form): ?>
-        <form method="POST" action="">
+        <form method="POST" action="" id="otpForm">
           <div class="form-group">
             <label for="otp" class="form-label">Enter Verification Code</label>
             <input type="text"
@@ -393,11 +407,11 @@ if ($show_otp_form && $token) {
 
           <?php if ($time_remaining): ?>
             <div class="timer">
-              ⏱️ Time remaining: <span id="timer"><?= htmlspecialchars($time_remaining) ?></span>
+              ⏱️ Time remaining: <span id="timer" data-remaining="<?= (int)$remaining_seconds ?>"><?= htmlspecialchars($time_remaining) ?></span>
             </div>
           <?php endif; ?>
 
-          <?php if (DEBUG_MODE): ?>
+          <?php if (estyIsDebugMode()): ?>
             <div class="alert alert-warning alert-dismissible fade show" role="alert">
               <strong><i class="bi bi-bug"></i> DEBUG MODE</strong><br>
               <small>For testing, OTP is logged to file.<br>
@@ -445,7 +459,7 @@ if ($show_otp_form && $token) {
       <?php endif; ?>
     </div>
 
-    <?php if (!$show_otp_form && !$show_password_form && !$message_type === 'success'): ?>
+    <?php if (!$show_otp_form && !$show_password_form && $message_type !== 'success'): ?>
       <div class="auth-footer">
         <p>Remember your password? <a href="login.php">Login here</a></p>
       </div>
@@ -461,6 +475,47 @@ if ($show_otp_form && $token) {
     otpInput.addEventListener('input', function(e) {
       e.target.value = e.target.value.replace(/[^0-9]/g, '');
     });
+  }
+
+  const timerElement = document.getElementById('timer');
+  if (timerElement) {
+    let remainingSeconds = parseInt(timerElement.dataset.remaining, 10);
+    if (!Number.isNaN(remainingSeconds) && remainingSeconds > 0) {
+      const otpForm = document.getElementById('otpForm');
+      const verifyButton = otpForm ? otpForm.querySelector('button[type="submit"]') : null;
+      const timerContainer = timerElement.closest('.timer');
+
+      const renderTime = (totalSeconds) => {
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        timerElement.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      };
+
+      const handleExpiry = () => {
+        timerElement.textContent = '00:00';
+        if (otpInput) otpInput.disabled = true;
+        if (verifyButton) verifyButton.disabled = true;
+        if (timerContainer && !document.getElementById('otpExpiredNotice')) {
+          const notice = document.createElement('div');
+          notice.id = 'otpExpiredNotice';
+          notice.className = 'text-danger mt-2';
+          notice.textContent = 'Your verification code has expired. Request a new reset link to continue.';
+          timerContainer.insertAdjacentElement('afterend', notice);
+        }
+      };
+
+      renderTime(remainingSeconds);
+
+      const countdownInterval = setInterval(() => {
+        remainingSeconds -= 1;
+        if (remainingSeconds <= 0) {
+          clearInterval(countdownInterval);
+          handleExpiry();
+        } else {
+          renderTime(remainingSeconds);
+        }
+      }, 1000);
+    }
   }
 
   // Password strength indicator

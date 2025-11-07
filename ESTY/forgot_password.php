@@ -3,6 +3,12 @@ session_start();
 require 'db.php';
 require 'config_email.php';
 
+function sendJsonResponse(array $payload): void {
+  header('Content-Type: application/json');
+  echo json_encode($payload);
+  exit;
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = trim($_POST['email'] ?? '');
     
@@ -98,7 +104,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 ";
                 
                 // Log OTP for debug mode
-                if (DEBUG_MODE) {
+                if (estyIsDebugMode()) {
                     $log_entry = date('Y-m-d H:i:s') . " | Email: $email | Username: $username | RESET OTP: $reset_otp | Token: $reset_token\n";
                     $debug_file = __DIR__ . '/logs/password_reset_debug.log';
                     if (!is_dir(__DIR__ . '/logs')) {
@@ -107,38 +113,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     file_put_contents($debug_file, $log_entry, FILE_APPEND);
                 }
                 
-                // Send email
-                $headers = "MIME-Version: 1.0" . "\r\n";
-                $headers .= "Content-type: text/html; charset=UTF-8" . "\r\n";
-                $headers .= "From: " . MAIL_FROM_NAME . " <" . MAIL_FROM . ">" . "\r\n";
-                mail($email, $subject, $email_body, $headers);
-                
-                $_SESSION['password_reset_email'] = $email;
-                $_SESSION['password_reset_token'] = $reset_token;
-                
-                // Return JSON response for AJAX
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => true,
-                    'message' => 'Password reset instructions have been sent to your email.'
-                ]);
-            } else {
-                header('Content-Type: application/json');
-                echo json_encode([
-                    'success' => false,
-                    'message' => 'Error processing password reset. Please try again.'
-                ]);
-            }
-            $insert_stmt->close();
-        } else {
-            // Email not found
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => false,
-                'message' => 'No account found with this email address.'
-            ]);
-        }
+        // Send email via PHPMailer SMTP (with fallback)
+        $email_sent = sendHtmlEmail($email, $subject, $email_body);
+
+        $_SESSION['password_reset_email'] = $email;
+        $_SESSION['password_reset_token'] = $reset_token;
+
+        $insert_stmt->close();
         $stmt->close();
+
+        sendJsonResponse([
+          'success' => $email_sent,
+          'message' => $email_sent ? 'Password reset instructions have been sent to your email.' : 'Error sending email. Please try again.'
+        ]);
+      } else {
+        $insert_stmt->close();
+        $stmt->close();
+
+        sendJsonResponse([
+          'success' => false,
+          'message' => 'Error processing password reset. Please try again.'
+        ]);
+      }
+    } else {
+      // Email not found
+      $stmt->close();
+
+      sendJsonResponse([
+        'success' => false,
+        'message' => 'No account found with this email address.'
+      ]);
+    }
     }
 }
 ?>

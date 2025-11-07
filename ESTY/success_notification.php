@@ -21,17 +21,18 @@ if (!empty($flash_message)) {
 
         if (isset($_SESSION['user_id'])) {
             $user_id = $_SESSION['user_id'];
-            $result = $conn->query("SELECT SUM(p.price * c.quantity) as total, COUNT(c.id) as count FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = $user_id");
+            // Use SUM of quantities (qty) so the notification shows total items, not distinct product rows
+            $result = $conn->query("SELECT SUM(p.price * c.quantity) as total, COUNT(c.id) as count, COALESCE(SUM(c.quantity),0) as qty FROM carts c JOIN products p ON c.product_id = p.id WHERE c.user_id = $user_id");
             if ($result) {
                 $row = $result->fetch_assoc();
-                $cart_count = $row['count'] ?? 0;
+                $cart_count = $row['qty'] ?? 0; // total quantity
                 $cart_total = $row['total'] ?? 0;
             } else {
                 error_log("Database error in success_notification.php: " . $conn->error);
             }
         } elseif (isset($_SESSION['cart']) && is_array($_SESSION['cart'])) {
-            $cart_count = count($_SESSION['cart']);
             foreach ($_SESSION['cart'] as $item) {
+                $cart_count += $item['quantity'];
                 $cart_total += $item['price'] * $item['quantity'];
             }
         }

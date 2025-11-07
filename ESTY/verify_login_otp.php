@@ -309,7 +309,7 @@ $stmt->close();
         </div>
       <?php endif; ?>
 
-      <?php if (DEBUG_MODE): ?>
+        <?php if (estyIsDebugMode()): ?>
         <div class="alert alert-warning alert-dismissible fade show" role="alert">
           <strong><i class="bi bi-bug"></i> DEBUG MODE ENABLED</strong><br>
           <small>For testing: OTP is being logged instead of emailed.<br>

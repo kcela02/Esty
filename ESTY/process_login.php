@@ -61,7 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         'redirect' => ''
                     ];
 
-                    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                    if (estyIsDebugMode()) {
                         $response['debug_otp'] = getDebugOtp($email);
                     }
 

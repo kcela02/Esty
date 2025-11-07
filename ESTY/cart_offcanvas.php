@@ -45,35 +45,51 @@ if (cartOffcanvasEl) {
 }
 
 function updateCartBadge() {
-  // Compute total quantity by reading data-quantity on each list-group-item (more reliable)
+  // Compute total quantity by reading data-quantity on each list-group-item
+  // NOTE: This is for internal offcanvas calculations only.
+  // The navbar badge is updated ONLY by addToCartAjax() responses or server-side rendering.
   var total = 0;
   document.querySelectorAll('#cartOffcanvasContent .list-group-item').forEach(function(row){
     var q = parseInt(row.getAttribute('data-quantity'));
     if (!isNaN(q)) total += q;
   });
-
-  // Find anchor(s) that contain the cart icon and update or create a badge inside them
-  var anchors = Array.from(document.querySelectorAll('a')).filter(function(a){
-    return a.getAttribute('title') === 'Shopping Cart' || a.querySelector('.bi-cart');
-  });
-  anchors.forEach(function(a){
-    var b = a.querySelector('.badge');
-    if(!b){
-      b = document.createElement('span');
-      b.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
-      b.style.width = '18px';
-      b.style.height = '18px';
-      b.style.display = 'flex';
-      b.style.alignItems = 'center';
-      b.style.justifyContent = 'center';
-      b.style.fontSize = '0.6rem';
-      b.style.borderRadius = '50%';
-      a.style.position = a.style.position || 'relative';
-      a.appendChild(b);
-    }
-    b.textContent = total > 0 ? total : '';
-    b.style.display = total > 0 ? 'flex' : 'none';
-  });
+  // Don't update navbar badge here - it causes stale data issues
+}
+function updateNavbarBadge() {
+  // Update navbar badge with COUNT of items (not total quantity)
+  // Fetch fresh cart data to ensure we have the latest count
+  fetch('cart_fragment.php')
+    .then(r => r.text())
+    .then(html => {
+      // Parse the HTML and count .list-group-item elements
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, 'text/html');
+      var items = doc.querySelectorAll('.list-group-item');
+      var itemCount = items.length;
+      
+      // Update the navbar cart icon badge
+      var cartLink = document.getElementById('cartIconLink');
+      if (cartLink) {
+        var badge = cartLink.querySelector('.badge');
+        if (!badge && itemCount > 0) {
+          badge = document.createElement('span');
+          badge.className = 'badge bg-danger position-absolute top-0 start-100 translate-middle';
+          badge.style.width = '18px';
+          badge.style.height = '18px';
+          badge.style.display = 'flex';
+          badge.style.alignItems = 'center';
+          badge.style.justifyContent = 'center';
+          badge.style.fontSize = '0.6rem';
+          badge.style.borderRadius = '50%';
+          cartLink.appendChild(badge);
+        }
+        if (badge) {
+          badge.textContent = itemCount > 0 ? itemCount : '';
+          badge.style.display = itemCount > 0 ? 'flex' : 'none';
+        }
+      }
+    })
+    .catch(err => console.error('Failed to update navbar badge:', err));
 }
 
 function bindCartFragmentButtons() {
@@ -110,10 +126,15 @@ function onIncrease(e) {
           if (el) el.checked = true;
         });
       }
-      updateCartBadge(); bindCartFragmentButtons(); bindCartSelectionHandlers(); updateSelectedSubtotalAndButton();
+      updateCartBadge(); 
+      updateNavbarBadge();
+      bindCartFragmentButtons(); 
+      bindCartSelectionHandlers(); 
+      updateSelectedSubtotalAndButton();
     })
     .catch(err=>console.error(err));
 }
+
 function onDecrease(e) {
   var id = e.currentTarget.getAttribute('data-id');
   var preserved = Array.from(document.querySelectorAll('#cartOffcanvasContent .cart-item-checkbox:checked')).map(function(c){ return c.value; });
@@ -128,7 +149,11 @@ function onDecrease(e) {
           if (el) el.checked = true;
         });
       }
-      updateCartBadge(); bindCartFragmentButtons(); bindCartSelectionHandlers(); updateSelectedSubtotalAndButton();
+      updateCartBadge(); 
+      updateNavbarBadge();
+      bindCartFragmentButtons(); 
+      bindCartSelectionHandlers(); 
+      updateSelectedSubtotalAndButton();
     })
     .catch(err=>console.error(err));
 }
@@ -147,7 +172,11 @@ function onRemove(e){
           if (el) el.checked = true;
         });
       }
-      updateCartBadge(); bindCartFragmentButtons(); bindCartSelectionHandlers(); updateSelectedSubtotalAndButton();
+      updateCartBadge(); 
+      updateNavbarBadge();
+      bindCartFragmentButtons(); 
+      bindCartSelectionHandlers(); 
+      updateSelectedSubtotalAndButton();
     })
     .catch(err=>console.error(err));
 }
@@ -218,7 +247,8 @@ function onCheckoutSelected(e){
 
 // Initial binding in case offcanvas content already present
 bindCartFragmentButtons();
-updateCartBadge();
+// Don't call updateCartBadge() on init - let navbar.php handle initial badge calculation server-side
+// Badge will be updated by addToCartAjax() or when offcanvas opens
 bindCartSelectionHandlers();
 updateSelectedSubtotalAndButton();
 </script>
