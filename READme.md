@@ -110,7 +110,6 @@ For local webhook testing, use a public tunnel (for example, ngrok) and set webh
 2. Start Apache and MySQL.
 3. Open:
    - User app: `http://localhost/Esty/ESTY/`
-   - Admin: `http://localhost/Esty/ESTY/admin/`
 
 ## Important Clarifications
 
