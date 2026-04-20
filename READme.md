@@ -130,6 +130,8 @@ University of Caloocan City - BS Computer Science Students
 - Alberto Magno Rili
 - Edgardo Sunga Jr.
 
-## License
+## Academic Use
 
-For academic and internal project use.
+This system was developed as an academic capstone project in collaboration with a client partner.
+Use is limited to educational purposes and approved client operations within the agreed project scope.
+Ownership, deployment rights, and any commercial use are governed by the agreement between the academic team, institution, and client.
